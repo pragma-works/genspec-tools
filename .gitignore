@@ -1,0 +1,14 @@
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.*
+*.pem
+*.key
+# output the tools write when run on a project of your own
+.gs-init-backup/
+docs/snapshots/
+# local scratch
+tmp/
+.tmp/

@@ -1,0 +1,13 @@
+{
+  "name": "genspec-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Checks that a software project has what it needs to be trusted, written for AI-assisted work. Node only, no dependencies.",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "demo": "node tools/gs-demo/gs-demo.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:quick": "node scripts/run-tests.mjs --quick"
+  }
+}
