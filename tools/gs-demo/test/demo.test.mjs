@@ -172,3 +172,32 @@ test('D12 --json prints the results object', () => {
   const dir = buildGood();
   try { const r = cli(dir, '--json'); assert.strictEqual(r.status, 0); const j = JSON.parse(r.stdout); assert.strictEqual(j.results.E02.status, 'found'); assert.ok(!/governed/i.test(r.stdout)); } finally { cleanup(dir); }
 });
+
+// (scan of many repositories, 2026-10-09) a sentinel that mentions code, package scopes or web addresses in backticks is not a sentinel with broken routes
+function withFiles(files) {
+  const dir = bare();
+  for (const [p, t] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true }); fs.writeFileSync(path.join(dir, p), t); }
+  return dir;
+}
+const SENTINEL_BODY = 'line 1\nline 2\nline 3\nline 4\nline 5\n';
+// F-006.4
+test('D13 E01: code, package scopes and web addresses in the sentinel are not counted as broken routes', () => {
+  const dir = withFiles({
+    'CLAUDE.md': SENTINEL_BODY + 'Never use `DateTime.Now/UtcNow`. Built with @react-three/fiber and `@nx/react`. See `example.dev/try`. Template: `docs/diagrams/flow-[x].md`.\n[arch](docs/architecture.md) [conv](docs/conventions.md)\n',
+    'docs/architecture.md': 'a\nb\nc\nd\ne\n', 'docs/conventions.md': 'a\nb\nc\nd\ne\n'
+  });
+  try {
+    const look = lookAt(dir);
+    assert.strictEqual(status(look, 'E01'), 'found', JSON.stringify(look.results.E01));
+  } finally { cleanup(dir); }
+});
+// F-006.4
+test('D14 E01: a real missing document is still named, with the note that it may be advice', () => {
+  const dir = withFiles({ 'CLAUDE.md': SENTINEL_BODY + 'See [the spec](docs/spec/SPEC.md) and `docs/missing.md`.\n', 'docs/other.md': 'x\n' });
+  try {
+    const look = lookAt(dir);
+    assert.strictEqual(status(look, 'E01'), 'weak');
+    assert.match(look.results.E01.note, /docs\/spec\/SPEC\.md|docs\/missing\.md/);
+    assert.match(look.results.E01.note, /advice/);
+  } finally { cleanup(dir); }
+});

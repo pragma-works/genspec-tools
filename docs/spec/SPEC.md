@@ -62,6 +62,7 @@ Every criterion below names the test file that checks it, and that test cites th
 - F-006.1 The original folder MUST NOT be modified and no temporary copy may be left behind. verified by: tools/gs-demo/test/demo.test.mjs
 - F-006.2 The output MUST NOT say "governed" or give a grade, and MUST end with the quick-look line. verified by: tools/gs-demo/test/demo.test.mjs
 - F-006.3 A very large folder MUST be refused with a message and nothing copied. verified by: tools/gs-demo/test/demo.test.mjs
+- F-006.4 A sentinel MUST NOT be marked weak because it mentions code, a package scope or a web address in backticks; a real missing document MUST still be named, with the note that it may be advice and not a route. verified by: tools/gs-demo/test/demo.test.mjs
 
 ## F-007 gs is one front door to the tools, and takes out only what it put in
 

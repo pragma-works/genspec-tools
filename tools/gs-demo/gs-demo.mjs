@@ -132,7 +132,11 @@ function routesFrom(c, relFile) {
   const refs = new Set();
   for (const m of t.matchAll(/`([^`\s]+)`|\]\(([^)\s#]+)(?:#[^)]*)?\)|(?:^|\s)@([\w./-]+)/gm)) {
     const raw = (m[1] || m[2] || m[3] || '').replace(/[.,;:]+$/, '');
-    if (!raw || /^[a-z]+:\/\//i.test(raw) || raw.startsWith('mailto:') || raw.startsWith('#') || /[*<>{}$|()=]/.test(raw)) continue;
+    // '@word/word' without a file extension is a package scope (@nx/react), not an @-import of a document
+    if (m[3] && !m[1] && !m[2] && !/\.(md|json|ya?ml|txt|toml)$/i.test(raw)) continue;
+    // a web address written without the scheme (example.dev/try) is not a file of the project
+    if (/^[\w-]+(\.[\w-]+)*\.(dev|com|io|org|net|app|ai|co|edu|me)(\/|$)/i.test(raw)) continue;
+    if (!raw || /^[a-z]+:\/\//i.test(raw) || raw.startsWith('mailto:') || raw.startsWith('#') || /[*<>{}$|()=\[\]]/.test(raw)) continue;
     if (!raw.includes('/') && !/\.(md|json|yml|yaml|txt|toml)$/i.test(raw)) continue;
     refs.add(raw.replace(/^\.\//, '').replace(/\/$/, ''));
   }
@@ -142,7 +146,12 @@ function routesFrom(c, relFile) {
     const cand = [r, base === '.' ? r : path.posix.join(base, r)];
     const hit = cand.find(x => c.has(x) || c.files.some(f => f.startsWith(x + '/')));
     if (hit) found.push(hit);
-    else if (/^[\w.-]+(\/[\w.-]+)+$|^[\w.-]+\.(md|json|ya?ml|txt|toml)$/.test(r) && !/^(docs\/ratifications\.md|docs\/spec\.lock)$/.test(r)) dangling.push(r);
+    else if (/^[\w.-]+(\/[\w.-]+)+$|^[\w.-]+\.(md|json|ya?ml|txt|toml)$/.test(r) && !/^(docs\/ratifications\.md|docs\/spec\.lock)$/.test(r)) {
+      // count it only when it looks like a file of this project: it ends in a file extension, or it starts inside a folder that exists
+      // (code such as DateTime.Now/UtcNow, or a package name such as react-three/fiber, is not a route)
+      const first = r.split('/')[0];
+      if (/\.[A-Za-z0-9]{1,5}$/.test(r) || c.files.some(f => f.startsWith(first + '/'))) dangling.push(r);
+    }
   }
   return { found: [...new Set(found)], dangling: [...new Set(dangling)] };
 }
@@ -172,7 +181,7 @@ function e01(c) {
   if (nonBlank(c.text(file)) < 5) return weak(`${file} is a stub (fewer than 5 lines)`);
   const { found: ok, dangling } = routesFrom(c, file);
   const good = ok.filter(r => nonEmptyRoute(c, r)), docs = good.filter(r => /\.(md|mdx|txt|rst)$/i.test(r) || /^(docs?|adr|decisions)(\/|$)/i.test(r));
-  if (dangling.length) return weak(`${file} points to files that do not exist: ${dangling.slice(0, 4).join(', ')}`);
+  if (dangling.length) return weak(`${file} mentions paths that do not exist: ${dangling.slice(0, 4).join(', ')} (if these are advice and not routes to documents, ignore this)`);
   if (docs.length < 2) return weak(`${file} routes to ${docs.length} document(s); a sentinel should route to the spec, architecture, conventions and decisions`);
   return found(`${file} routes to ${docs.length} existing documents`);
 }
