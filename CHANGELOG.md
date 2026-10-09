@@ -2,6 +2,16 @@
 
 All notable changes to this repository. The tools are not versioned separately yet.
 
+## [Unreleased]
+
+### Added
+- `bin/gs.mjs`, the `gs` command: `npx github:pragma-works/genspec-tools <command>` runs the tools with no clone and no registry account. Commands: `demo` (also `--sample`), `start`, `init`, `check`, `lock`, `decide`, `snapshot`, `update`, `uninstall`, `doctor`, `help`.
+- `gs-init` writes an install record (`.gs-manifest.json`) and has `--uninstall`, which removes only what the record lists and keeps any file changed since; `--also` writes pointer files for further assistants (`AGENTS.md`, `CLAUDE.md`, Cursor rules).
+- `docs/publishing-to-npm.md`: the steps for the maintainer to publish under the organization scope (not done).
+
+### Fixed
+- `gs-init` named a personal fork in its "fetch the tools" message and now names `pragma-works/genspec-tools`; it also copies the licence when run from the `tools` folder.
+
 ## [0.1.0] - 2026-10-08
 
 First assembly of the repository from two development branches.

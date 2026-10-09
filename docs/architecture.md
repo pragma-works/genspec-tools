@@ -10,8 +10,11 @@ genspec-tools is a set of small command-line tools in plain Node (18 or later, n
 | gs-snapshot | `tools/gs-snapshot/gs-snapshot.mjs` | everything the others can read | `docs/snapshots/` |
 | gs-init | `tools/gs-init/gs-init.mjs` | the project it is run in | the sentinel, spec, decisions, gate, hooks and floor of that project, after a backup |
 | gs-demo | `tools/gs-demo/gs-demo.mjs` | a copy of a project folder | standard output only |
+| gs | `bin/gs.mjs` (the `bin` of `package.json`, so `npx github:pragma-works/genspec-tools <command>` works with no clone) | the arguments, the project's `.gs-manifest.json` and `.gs.json`, and for `update` a fetched copy of this repository | nothing itself; it runs the tool that does the work |
 
 ## How the tools depend on each other
+
+`bin/gs.mjs` is the front door: it holds no logic of the tools, only the choice of tool, at most two questions in a terminal (level and assistant files), and the plain-words summary. `gs init` calls `gs-init`; `gs uninstall` calls `gs-init --uninstall`, which reads the install record `gs-init` wrote; `gs update` clones this repository to a temporary folder (or takes `--from <folder>`) and runs that copy's `gs-init` at the recorded level.
 
 They sit side by side and call each other by relative path; nothing is vendored. `gs-init` copies `gs-check`, `gs-lock` and `gs-decide` into the project it installs. `gs-snapshot` and `gs-demo` use `gs-lock`, and `gs-snapshot` runs `gs-check`. `gs-check` runs the target's own hooks and tests in the throwaway clone (it plants a violation and watches whether the project's gate refuses it), which is why it executes project code.
 

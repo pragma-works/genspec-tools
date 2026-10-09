@@ -31,21 +31,71 @@ The repository is checked with its own `gs-check --strict` (`node scripts/self-c
 | E09 commits | PASS since `a101644`; **PARTIAL over the whole history** | two early assembly commits (62116f5, 57 files; 5f5dedd, 7 files) are not atomic and public history is not rewritten |
 | E10 spec lock | **not met** (PARTIAL) | `gs-lock` is not wired to this repository: no lock file, no tags on the code. L1 leaves it to day 7 to 30 |
 | E11 co-change gate | **not met** (ABSENT) | not wired; and `gs-check` finds no source file outside `tools/` to probe, so it cannot judge it here |
-| E12 README steps | PASS | the commands in this README that do not need a project of yours run from a clean clone |
+| E12 README steps | PASS | the commands in the "Fresh clone" block run from a clean clone; the `npx` commands are in text blocks, which the check does not run (they need the network) |
 
 What this does not show: that the spec is the right spec, that the criteria are all that matters, that a CI re-check is a required check (branch protection is a server setting and is not set by this repository), or that the hooks are installed in your clone (run `node scripts/install-hooks.mjs` once). The same author wrote the tools, the tests, the spec and the mapping between them. It also applies the checker to itself with a configuration the author chose to pass; the E09 start commit is such a choice.
 
-## Thirty-second quickstart
+## Try it in one line
+
+```text
+npx github:pragma-works/genspec-tools demo --sample
+```
+
+That is the whole install. `npx` downloads this repository from GitHub into npm's cache, runs the `gs` command in it, and leaves nothing in your folder. There is no clone, no account and no package registry. It needs **Node 18 or later and git**, and an internet connection the first time.
+
+`demo --sample` looks at a small example project that comes with the tools, so you can see the output before you point it at your own work. Then try it on a project of yours (it only reads; it works on a copy):
+
+```text
+cd your-project
+npx github:pragma-works/genspec-tools demo
+```
+
+With no command at all, inside a project folder, it does the same: `npx github:pragma-works/genspec-tools`.
+
+If you will use it more than once, the short form is a global install from the same address (`npm install -g github:pragma-works/genspec-tools`), after which every command below is `gs <command>`. Everything below is written as `gs`; with `npx` put `npx github:pragma-works/genspec-tools` in its place.
+
+| Command | What it does |
+|---|---|
+| `gs demo [folder]` | The quick look (seconds): what is there, what is missing, the three most useful next steps. `--sample` uses the example project. Reads a copy, runs none of your code |
+| `gs start` | For a first time: five lines of explanation, the quick look, then the lightest setup (level L0, notes only) |
+| `gs init` | Sets the project up. In a terminal it asks two questions (how deep, and which assistant files: `CLAUDE.md`, `AGENTS.md`, Cursor rules). For scripts: `gs init --level L1 --agents claude,codex --yes`. `--dry-run` lists what it would do and writes nothing |
+| `gs doctor` | What is installed here, what is missing, and whether the tool copies match this version |
+| `gs update` | Fetches the newest tools from GitHub and runs the setup again; anything it replaces is copied to `.gs-init-backup/` first |
+| `gs uninstall` | Takes out only what `gs init` wrote, using the record it made (`.gs-manifest.json`). A file you changed since stays. Your code and your git history are never touched |
+| `gs check` | The full test (minutes): plants mistakes in a throwaway copy of your last commit and sees whether your checks refuse them. It runs your project's own code |
+| `gs lock`, `gs decide`, `gs snapshot` | The other tools, with their usual options |
+
+Measured on 2026-10-09 through the GitHub address above, wall clock, one run each. Cold means an empty npm cache (the first run ever on that machine, download included); warm means the same command again.
+
+| | Windows 11, Node 24 | Linux container, Node 22 |
+|---|---|---|
+| `gs help`, cold | 8.7 s | 3.2 s |
+| `gs demo --sample`, warm | 2.3 s | 1.1 s |
+| `gs init --level L1` on a small Node project, with its strict self-check | 10.6 s (cold) | 2.2 s (warm) |
+
+Node 18.20 is the oldest version tried (the tests of `bin/test/gs.test.mjs` pass on it in a Linux container); Node 16 is refused with a message and exit 2.
+
+### What this does not do
+
+- It needs Node and git on your machine. It does not install either.
+- It is not on the npm registry. Publishing there needs the maintainer's npm account; the exact steps are in [docs/publishing-to-npm.md](docs/publishing-to-npm.md) and have not been run. Until then the address above is the way in, and it follows the `main` branch of this repository: you get whatever is on `main` at that moment. To pin a version, add a tag or a commit: `npx github:pragma-works/genspec-tools#<commit>`.
+- It trusts GitHub and npm to deliver this repository unchanged. Read the one file `bin/gs.mjs` (under 300 lines) before running it, as with any `npx` command.
+- `gs init` does not make your spec right, write your tests, choose who ratifies, set branch protection or stop `git commit --no-verify`. `gs init` needs no model and no internet, and never edits your code, commits or pushes (`gs update` is the one command that fetches).
+- The quick look is not a grade. A green `gs init` proof means the form it claims is there and a planted violation was refused; nothing here says the software is right.
+- A teammate who clones the project afterwards needs `node scripts/install-hooks.mjs` once, because git does not copy hook settings. Nothing needs gs installed to run the checks, which are copied into the project.
+- `gs uninstall` needs the record. A project set up before the record existed (before 2026-10-09) has none: run `gs init` once more (it changes nothing that is already right) and then `gs uninstall`.
+- `.gs-manifest.json` is meant to be committed with the setup, so a teammate can uninstall too. The `.git` folder that `gs init` makes in a folder that had none, and `.gs-init-backup/`, are never removed by `gs uninstall`.
+
+### Without npx
 
 ```
 git clone https://github.com/pragma-works/genspec-tools
 cd genspec-tools
+node bin/gs.mjs demo --sample
 node tools/gs-demo/gs-demo.mjs .
 ```
 
-The last line looks at the clone itself; give it the path of your own project instead of the dot.
-
-Needs Node 18 or later and git. It copies the folder you give it to a temporary folder (your folder is only read), looks at the twelve things in about half a minute without running any of your code, and prints what it found, what is missing, and the three most useful next steps. It refuses a very large folder with a message. It is a quick look: for some elements it only reads how a gate is wired and says so; for others it says "not checked in the quick look".
+The last line looks at the clone itself; give it the path of your own project instead of the dot. The old way of calling a tool directly (`node tools/gs-demo/gs-demo.mjs <path>`) still works, and so does every other file under `tools/`.
 
 For the real test, which plants a violation in a throwaway clone and sees whether your gates refuse it (minutes, and it runs your project's code, so use a disposable environment for a project you did not write):
 
@@ -76,12 +126,13 @@ The method behind them is at https://genspec.dev.
 
 | Tool | What it does | What it cannot prove |
 |---|---|---|
+| [`gs`](bin/gs.mjs) | The front door: `gs demo`, `start`, `init`, `check`, `lock`, `decide`, `snapshot`, `update`, `uninstall`, `doctor`. Picks the tool, asks at most two questions, says in plain words what it got and what to do next | Nothing the tools do not: it adds no check of its own |
 | [`gs-demo`](tools/gs-demo) | The 30-second quick look described above | That any gate works; it reads wiring and says so. E12 is never checked |
 | [`gs-check`](tools/gs-check) | Judges the twelve elements as present **and working** on a git repository, in a throwaway clone; `--strict` credits only a hook that refuses a planted violation; `--both`, `--verbose`; `--migration` and `--sync` for projects that were migrated or got a spec generated from existing code | Server-side CI, branch protection, `--no-verify`, whether a spec or a test is good. Runs project code |
 | [`gs-lock`](tools/gs-lock) | The spec lock (`gs-lock`), the co-change gate (`gs-cochange`) and one-command red proofs (`gs-redproof`) | That a tagged file really implements its spec section; `ratify` is a command anyone, or any agent, can run |
 | [`gs-decide`](tools/gs-decide) | An append-only, hash-chained record of decisions and ratifications under a named git identity, optionally signed; a hook that refuses protected changes without one; `gs-attribution-hook` for marking agent-made commits; `gs-decide-ci` for the server re-check | That the person who ratified understood what they ratified; local hooks can be skipped, so the CI re-check must be a required check |
 | [`gs-snapshot`](tools/gs-snapshot) | A dated, deterministic report of what a project can compute about itself, and the difference since the last one | Anything about correctness; counts are counts |
-| [`gs-init`](tools/gs-init) | An installer that wires a project at one of three depths (L0 commit trailers, L1 hooks and gates, L2 signed ratifications and CI), with `--dry-run` | That the spec is right, who should ratify, or that branch protection is on |
+| [`gs-init`](tools/gs-init) | An installer that wires a project at one of three depths (L0 commit trailers, L1 hooks and gates, L2 signed ratifications and CI), with `--dry-run`, an install record and `--uninstall` | That the spec is right, who should ratify, or that branch protection is on |
 
 The tools sit side by side and call each other by relative path (`gs-init` copies `gs-check`, `gs-lock` and `gs-decide` into a project; `gs-snapshot` and `gs-demo` use `gs-lock`; the tests of several tools use the control projects of `gs-check`). Nothing is vendored.
 
@@ -107,9 +158,10 @@ Measured on Node 24 on Windows 11 and in a Linux container (Node 22):
 | gs-snapshot | 19 | 19 pass | 19 pass |
 | gs-init | 19 | 19 pass | 19 pass |
 | gs-demo | 13 | 13 pass | 13 pass |
-| **Total** | **280** | **280 pass, 0 fail** | **280 pass, 0 fail** |
+| gs (dispatcher, install record, uninstall, update) | 14 | 14 pass | 14 pass |
+| **Total** | **294** | see below | see below |
 
-CI runs everything on Linux and Windows with Node 20 and 22 (`.github/workflows/test.yml`).
+The 280 other tests were measured on 2026-10-08; the 14 of `gs` on 2026-10-09 (Windows Node 24, Linux Node 22 and Node 18); the 294 have not been run together in one pass here. CI runs everything on Linux and Windows with Node 20 and 22 (`.github/workflows/test.yml`).
 
 ## Licence
 

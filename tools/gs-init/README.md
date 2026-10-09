@@ -6,8 +6,11 @@ One file, `gs-init.mjs`. Node 18+, no dependencies, no model, no network. MIT (s
 
 ```
 cd your-project            # the top folder of a git repository (it runs git init if there is none)
-node path/to/gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--tools <folder>] [--no-proof] [--pubkey <file>] [--verbose]
+node path/to/gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--also AGENTS.md,CLAUDE.md,cursor] [--tools <folder>] [--no-proof] [--pubkey <file>] [--verbose]
+node path/to/gs-init.mjs --uninstall [--dry-run]
 ```
+
+The usual way in is `gs init` (see the top-level README): `npx github:pragma-works/genspec-tools init`. It asks the level and the assistant files in a terminal and calls this file.
 
 Start with `--dry-run`: it prints every file it would create, append to or keep, and writes nothing.
 
@@ -28,6 +31,20 @@ Agent commit marking (see https://genspec.dev): its L0 (trailers), L1 (the hook)
 - **Hooks are chained, not replaced.** A real hook in `.git/hooks` is carried into `.githooks/` with the checks added above it; if `core.hooksPath` already points somewhere (husky, say) the block goes into that folder's hooks; a hook that is not a shell script is kept as `<name>.gs-prev` and called after the checks.
 - **Every change to a file of yours is copied first** to `.gs-init-backup/<stamp>/` (kept out of git through `.git/info/exclude`). Running it again changes nothing.
 - It never commits, pushes, edits your code or calls a network.
+- **`--also`** writes a short pointer block into the other assistant files you name (`AGENTS.md`, `CLAUDE.md`, or `cursor` for `.cursor/rules/gs.mdc`): "read the sentinel first". The sentinel itself (`--sentinel`) carries the full text.
+
+## The install record and uninstall
+
+Every run writes `.gs-manifest.json` (commit it with the setup): each file it created with a hash of what it wrote, each marked block it added to a file of yours, each settings key it set with what the key held before, and the `core.hooksPath` setting. A second run leaves it byte-identical.
+
+`--uninstall` reads that record and removes only that:
+
+- a created file is deleted only while it is **byte for byte what was written**; a file you edited since stays, and is named as kept;
+- a block is taken out of a file of yours and the rest is left as it was (after a copy in `.gs-init-backup/<stamp>-uninstall/`); a file that holds nothing but the block is deleted; a hook of yours that was chained or wrapped is put back;
+- the settings keys it set are removed or put back to the value they had, unless you changed them since; `core.hooksPath` is unset if it still holds what was set;
+- folders it emptied are removed; `.git` (even one `git init` made), `.gs-init-backup/` and your own files never are.
+
+Without a record it refuses. A project set up before the record existed has none: run the installer once more (it changes nothing already right) and then uninstall. `--dry-run` lists what would happen and changes nothing.
 
 ## Where the tools come from
 
@@ -46,12 +63,12 @@ If a claimed item does not pass it says so and exits 1. The starter spec has thr
 
 ## What it cannot do
 
-It cannot make the spec right, write your tests, choose who ratifies, set branch protection, or stop `git commit --no-verify` (the CI file at L2 re-checks, if you make it a required check). It does not detect a stack's real test command beyond `npm test`, `pytest`, `go test ./...`, `dotnet test`, and only when the tool is on this machine; otherwise it says no test command is set. It writes the files in English. A clone made by someone else needs `node scripts/install-hooks.mjs` once, because git does not copy hook settings.
+It cannot make the spec right, write your tests, choose who ratifies, set branch protection, or stop `git commit --no-verify` (the CI file at L2 re-checks, if you make it a required check). It does not detect a stack's real test command beyond `npm test`, `pytest`, `go test ./...`, `dotnet test`, and only when the tool is on this machine; otherwise it says no test command is set. It writes the files in English. A file left byte-identical to what a previous run wrote (the generated gate, the tool copies) is claimed by the record even if a person put it there first. A clone made by someone else needs `node scripts/install-hooks.mjs` once, because git does not copy hook settings.
 
 ## Tests
 
 ```
-node --test tools/gs-init/test/init.test.mjs      # 19 tests: dry run, idempotency, hook chaining (shell, husky folder, non-shell), the three levels on node and python, backups, gate red/green, L2 wiring, two proof runs
+node --test tools/gs-init/test/init.test.mjs      # 19 tests (the install record, uninstall, update and the dispatcher are tested in bin/test/gs.test.mjs, 14 tests): dry run, idempotency, hook chaining (shell, husky folder, non-shell), the three levels on node and python, backups, gate red/green, L2 wiring, two proof runs
 GS_INIT_SKIP_PROOF=1 node --test tools/gs-init/test/init.test.mjs   # without the two gs-check runs
 ```
 
