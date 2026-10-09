@@ -261,7 +261,7 @@ function e05(c, G) {
   if (empty.length) return weak(`hook(s) that look like a gate but never block (only print or exit 0): ${empty.slice(0, 3).map(h => h.file).join(', ')}`);
   if (G.hooks.length && !G.wired) return weak('hooks are versioned but nothing installs them (no prepare script, husky, core.hooksPath or instruction)');
   const viaHook = G.blocking.length > 0, viaCi = G.ci.length > 0;
-  if (viaHook || viaCi) return found(`${G.tests.length} test file(s); ${[viaHook ? 'a hook with content, installed by a script or instruction' : '', viaCi ? 'a CI step that runs the tests' : ''].filter(Boolean).join(' and ')} (wiring read, not exercised)`);
+  if (viaHook || viaCi) return found(`${G.tests.length} test file(s); ${[viaHook ? 'a hook with content, installed by a script or instruction' : '', viaCi ? 'a CI step that runs the tests' : ''].filter(Boolean).join(' and ')} (wiring read, not exercised)${viaHook ? '' : '. A CI step runs after the change is made: gs-check --strict credits only a hook that blocks a commit or push, so it may read PARTIAL there'}`);
   if (G.testScript) return weak('tests exist and run with a script, but nothing runs that script for you: no hook, no CI step');
   return weak('tests exist but no gate runs them');
 }

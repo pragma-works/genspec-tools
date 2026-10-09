@@ -218,7 +218,7 @@ test('D15 E02: the same id in two feature folders (spec-kit layout) is not a dup
 test('D17 E05: a CI step that runs the tests through make ci, tox or just is recognised; a CI file that runs nothing is not', () => {
   for (const [cmd, expected] of [['make ci', 'found'], ['tox -e py312', 'found'], ['just test', 'found'], ['echo hello', 'weak']]) {
     const dir = withFiles({ 'tests/test_a.py': 'def test_a():\n    assert True\n', '.github/workflows/ci.yml': `name: ci\non: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Run tests\n        run: ${cmd}\n` });
-    try { assert.strictEqual(status(lookAt(dir), 'E05'), expected, cmd); } finally { cleanup(dir); }
+    try { const look = lookAt(dir); assert.strictEqual(status(look, 'E05'), expected, cmd); if (expected === 'found') assert.match(look.results.E05.note, /credits only a hook/); } finally { cleanup(dir); }
   }
 });
 // F-006.8
