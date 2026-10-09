@@ -64,6 +64,7 @@ Every criterion below names the test file that checks it, and that test cites th
 - F-006.3 A very large folder MUST be refused with a message and nothing copied. verified by: tools/gs-demo/test/demo.test.mjs
 - F-006.4 A sentinel MUST NOT be marked weak because it mentions code, a package scope or a web address in backticks; a real missing document MUST still be named, with the note that it may be advice and not a route. verified by: tools/gs-demo/test/demo.test.mjs
 - F-006.5 A spec numbered per feature folder (specs/001-name/spec.md, the spec-kit layout) MUST NOT be reported as having duplicate ids, a real duplicate inside one file MUST still be reported, and a spec-driven tool folder (.specify, openspec, _bmad) MUST be named in the E02 note. verified by: tools/gs-demo/test/demo.test.mjs
+- F-006.6 A CI step that runs the tests through make ci, tox, nox, just, bun, vitest or jest MUST count as a gate that runs them; a CI file that runs no test command MUST NOT. verified by: tools/gs-demo/test/demo.test.mjs
 
 ## F-007 gs is one front door to the tools, and takes out only what it put in
 

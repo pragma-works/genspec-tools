@@ -247,7 +247,8 @@ function gateFacts(c) {
     || Object.entries(scripts).some(([k, v]) => /^(prepare|postinstall|install|setup|hooks)$/.test(k) && hookInstaller.test(v)) || (pkg && pkg['simple-git-hooks'] ? true : false)
     || hookInstaller.test(readme);
   const ciFiles = c.files.filter(f => /^\.github\/workflows\/[^/]+\.ya?ml$|^\.gitlab-ci\.yml$|^azure-pipelines\.yml$|^\.circleci\/config\.yml$|^Jenkinsfile$/.test(f));
-  const TESTCMD = /\b(npm (run )?test|npm run \w*(test|check|gate)\w*|yarn test|pnpm test|pytest|python -m (pytest|unittest)|go test|dotnet test|cargo test|node --test|mvn (-\w+ )*test|gradle(w)? test|make (test|check)|bundle exec rspec|phpunit)\b/;
+  // (scan, 2026-10-09) requests runs its tests with `make ci`; other projects use tox, nox, just, bun, vitest, jest and the like
+  const TESTCMD = /\b(npm (run )?test|npm run \w*(test|check|gate|ci)\w*|(yarn|pnpm|bun)( run)? (-\w+ )*test|pytest|python -m (pytest|unittest)|go test|dotnet test|cargo (nextest|test)|node --test|mvn (-\w+ )*(test|verify)|gradle(w)? (test|check)|make (test|tests|check|ci)|just (test|check|ci)|tox|nox|vitest|jest|deno test|mix test|rake (test|spec)|ctest|swift test|flutter test|sbt test|bundle exec rspec|phpunit)\b/;
   const ci = ciFiles.filter(f => { const t = c.text(f) || ''; return TESTCMD.test(t) && !/continue-on-error:\s*true/.test(t); });
   const testScript = scripts.test && !/no test specified|^\s*(echo|exit 0|true)\b/.test(scripts.test) ? scripts.test : null;
   const tests = c.files.filter(f => TEST_FILE.test(f) && !/(^|\/)(fixtures?|node_modules)\//.test(f));

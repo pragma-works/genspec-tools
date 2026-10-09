@@ -214,6 +214,13 @@ test('D15 E02: the same id in two feature folders (spec-kit layout) is not a dup
   const dir2 = withFiles({ 'docs/spec/SPEC.md': '# S\n\n- FR-001 a\n- FR-001 b\n\n## Acceptance criteria\n\n- AC-001 c\n' });
   try { assert.strictEqual(status(lookAt(dir2), 'E02'), 'weak'); } finally { cleanup(dir2); } // a real duplicate inside one file is still caught
 });
+// F-006.6
+test('D17 E05: a CI step that runs the tests through make ci, tox or just is recognised; a CI file that runs nothing is not', () => {
+  for (const [cmd, expected] of [['make ci', 'found'], ['tox -e py312', 'found'], ['just test', 'found'], ['echo hello', 'weak']]) {
+    const dir = withFiles({ 'tests/test_a.py': 'def test_a():\n    assert True\n', '.github/workflows/ci.yml': `name: ci\non: push\njobs:\n  t:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: Run tests\n        run: ${cmd}\n` });
+    try { assert.strictEqual(status(lookAt(dir), 'E05'), expected, cmd); } finally { cleanup(dir); }
+  }
+});
 // F-006.5
 test('D16 E02: a project with a spec-driven tool folder is told which folder was seen and what is read', () => {
   const dir = withFiles({ '.specify/memory/constitution.md': '# C\n', 'openspec/changes/x/proposal.md': '# P\n' });
