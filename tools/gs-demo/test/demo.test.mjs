@@ -221,6 +221,28 @@ test('D17 E05: a CI step that runs the tests through make ci, tox or just is rec
     try { assert.strictEqual(status(lookAt(dir), 'E05'), expected, cmd); } finally { cleanup(dir); }
   }
 });
+// F-006.7
+test('D18 a folder that is mostly documents gets a note that the checks are for code projects; a code project does not', () => {
+  const docs = {}; for (let i = 0; i < 12; i++) docs[`notes/n${i}.md`] = `# Note ${i}\n\ntext\n`;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsdemo-docs-')); for (const [p, t] of Object.entries(docs)) { fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true }); fs.writeFileSync(path.join(dir, p), t); }
+  try {
+    const look = lookAt(dir);
+    assert.strictEqual(look.profile.codeProject, false);
+    assert.match(render(look), /Note: Only 0 of \d+ files are source code\. These twelve checks are written for software projects; a documents, content or game-assets project needs a different profile/);
+  } finally { cleanup(dir); }
+  const good = buildGood();
+  try { const look = lookAt(good); assert.strictEqual(look.profile.codeProject, true); assert.ok(!/different profile/.test(render(look))); } finally { cleanup(good); }
+});
+// F-006.7
+test('D19 a folder without git history says so in E09, and the found line is a list, not a tally', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsdemo-nogit-'));
+  fs.writeFileSync(path.join(dir, 'README.md'), '# x\n');
+  try {
+    const look = lookAt(dir);
+    assert.match(look.results.E09.note, /no \.git folder/);
+    assert.ok(!/ of the 12 elements/.test(render(look)));
+  } finally { cleanup(dir); }
+});
 // F-006.5
 test('D16 E02: a project with a spec-driven tool folder is told which folder was seen and what is read', () => {
   const dir = withFiles({ '.specify/memory/constitution.md': '# C\n', 'openspec/changes/x/proposal.md': '# P\n' });

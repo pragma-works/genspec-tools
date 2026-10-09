@@ -292,15 +292,23 @@ function e08(c, S) {
   if (uncovered.length) return weak(`${uncovered.length} of ${S.criteria.length} criteria are in no test and no coverage table: ${uncovered.slice(0, 5).join(', ')}`);
   return found(`all ${S.criteria.length} criteria appear in a test or in the coverage table (a mention, not proof that the test checks it${S.perFeature ? '; ids repeat across feature folders, so a mention of one id cannot say which feature it covers' : ''})`);
 }
-function e09(c, orig, gitOk) {
-  if (!gitOk) return skipped('the git history was not available or was too large to copy');
+// The twelve checks are written for software projects. Say so when the folder is mostly something else (documents, content, game assets).
+const SOURCE_EXT = /\.(js|mjs|cjs|jsx|ts|tsx|py|cs|go|rs|java|kt|rb|php|c|cc|cpp|h|hpp|gd|swift|lua|sh|ps1|scala|dart|vue|svelte)$/i;
+export function profileOf(c) {
+  const files = c.files.filter(f => !f.startsWith('.git/'));
+  const source = files.filter(f => SOURCE_EXT.test(f)).length;
+  const notCode = files.length >= 10 && (source === 0 || source / files.length < 0.05);
+  return { files: files.length, sourceFiles: source, codeProject: !notCode, note: notCode ? `Only ${source} of ${files.length} files are source code. These twelve checks are written for software projects; a documents, content or game-assets project needs a different profile, and a "missing" below says little about it.` : '' };
+}
+function e09(c, orig, gitOk, gitNote) {
+  if (!gitOk) return skipped(gitNote || 'the git history was not available or was too large to copy');
   const r = sh('git', ['log', '-n', '50', '--no-merges', '--pretty=%s'], c.copy);
   if (r.code !== 0) return skipped('this folder is not a git repository');
   const subjects = r.stdout.split('\n').map(s => s.trim()).filter(Boolean);
   if (subjects.length < 5) return skipped(`only ${subjects.length} commits so far`);
   const conv = subjects.filter(s => CONVENTIONAL.test(s)).length, share = conv / subjects.length;
   const lens = subjects.map(s => s.length).sort((a, b) => a - b), median = lens[Math.floor(lens.length / 2)];
-  if (share < 0.8) return weak(`${conv} of the last ${subjects.length} commit messages are conventional (feat:, fix:, docs:, ...)`);
+  if (share < 0.8) return weak(`${conv} of the last ${subjects.length} commit messages are conventional (feat:, fix:, docs:, ...); only that style is recognised, so clear messages in another style are not counted`);
   if (median < 15) return weak(`messages are conventional but very short (median ${median} characters)`);
   return found(`${conv} of the last ${subjects.length} commit messages are conventional and descriptive`);
 }
@@ -347,9 +355,9 @@ export function lookAt(target, opts = {}) {
     const res = {
       E01: safe('E01', () => e01(c)), E02: safe('E02', () => e02(c, S)), E03: safe('E03', () => e03(c)), E04: safe('E04', () => e04(c)),
       E05: safe('E05', () => e05(c, G)), E06: safe('E06', () => e06(c, G)), E07: safe('E07', () => e07(c, G)), E08: safe('E08', () => e08(c, S)),
-      E09: safe('E09', () => e09(c, root, withGit)), E10: safe('E10', () => e10(c, lockPath, deadline)), E11: safe('E11', () => e11(c, G)), E12: e12()
+      E09: safe('E09', () => e09(c, root, withGit, m.gitFiles > 0 ? `the git history is ${Math.round(m.gitBytes / 1048576)} MB, over the ${o.gitMaxMb} MB the quick look copies, so commits were not examined` : 'this folder has no .git folder, so commits were not examined')), E10: safe('E10', () => e10(c, lockPath, deadline)), E11: safe('E11', () => e11(c, G)), E12: e12()
     };
-    return { root, files: m.files, secs: Math.round((Date.now() - start) / 100) / 10, results: res };
+    return { root, files: m.files, secs: Math.round((Date.now() - start) / 100) / 10, profile: profileOf(c), results: res };
   } finally {
     try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); } catch { /* best effort */ }
   }
@@ -362,6 +370,7 @@ export function render(look, repoArg = '<path-to-repo>') {
   const by = s => ELEMENTS.filter(([id]) => res[id].status === s);
   L.push(`gs-demo: a quick look at ${look.root}`);
   L.push(`A copy was examined in a temporary folder and then deleted; your folder was only read. (${look.files} files, ${look.secs} s)`);
+  if (look.profile && look.profile.note) { L.push(''); L.push('Note: ' + look.profile.note); }
   L.push('');
   for (const [id, name] of ELEMENTS) {
     const r = res[id];
@@ -371,7 +380,7 @@ export function render(look, repoArg = '<path-to-repo>') {
   L.push('');
   const f = by('found'), w = by('weak'), mi = by('missing'), nc = by('not checked');
   L.push('What it found');
-  L.push(f.length ? `  ${f.length} of the 12 elements are there: ${f.map(([id]) => id).join(', ')}.` : '  None of the 12 elements was found in a form this quick look can recognise.');
+  L.push(f.length ? `  Found: ${f.map(([id]) => id).join(', ')}.` : '  No element was found in a form this quick look can recognise.');
   L.push('What is missing or weak');
   L.push(mi.length + w.length ? `  ${mi.length ? 'missing: ' + mi.map(([id]) => id).join(', ') + '.' : ''}${mi.length && w.length ? ' ' : ''}${w.length ? 'weak: ' + w.map(([id]) => id).join(', ') + '.' : ''}` : '  Nothing the quick look could see.');
   if (nc.length) L.push(`  Not checked in the quick look: ${nc.map(([id]) => id).join(', ')}.`);
