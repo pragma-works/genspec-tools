@@ -31,7 +31,8 @@ if (Number(process.versions.node.split('.')[0]) < 18) fail(`this needs Node 18 o
 // ------------------------------------------------------------------ small helpers
 const takeFlag = (args, ...names) => { let hit = false; for (const n of names) { let i; while ((i = args.indexOf(n)) >= 0) { args.splice(i, 1); hit = true; } } return hit; };
 const takeVal = (args, name) => { const i = args.indexOf(name); if (i < 0) return null; if (i + 1 >= args.length) fail(`${name} needs a value`); const v = args[i + 1]; args.splice(i, 2); return v; };
-const run = (script, args, opts = {}) => spawnSync(process.execPath, [script, ...args], { stdio: 'inherit', cwd: process.cwd(), ...opts }).status ?? 1;
+// GS_FRONT_DOOR tells a tool that it was started through gs, so it can suggest `gs check` and not a path inside a folder that npx keeps in its cache
+const run = (script, args, opts = {}) => spawnSync(process.execPath, [script, ...args], { stdio: 'inherit', cwd: process.cwd(), env: { ...process.env, GS_FRONT_DOOR: '1' }, ...opts }).status ?? 1;
 const gitOk = () => spawnSync('git', ['--version'], { encoding: 'utf8' }).status === 0;
 const needGit = () => { if (!gitOk()) fail('git is needed and was not found. Install it from https://git-scm.com and run this again.'); };
 const cwd = () => process.cwd();

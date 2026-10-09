@@ -391,7 +391,9 @@ export function render(look, repoArg = '<path-to-repo>') {
   const steps = PRIORITY.filter(id => res[id].status === 'missing' || res[id].status === 'weak').slice(0, 3);
   L.push('The three most valuable next steps');
   const extra = [
-    `Run the full checker, which plants a violation and sees whether the gates refuse it (minutes): node tools/gs-check/gs-check.mjs --repo ${repoArg} --strict`,
+    process.env.GS_FRONT_DOOR === '1'
+      ? 'Run the full check inside the project folder: gs check. It plants a violation in a copy and sees whether the gates refuse it (minutes; it runs the code of the project, so use it on work you trust).'
+      : `Run the full checker, which plants a violation and sees whether the gates refuse it (minutes): node tools/gs-check/gs-check.mjs --repo ${repoArg} --strict`,
     'Read the method and the twelve elements at https://genspec.dev, and pick the element that would hurt most if it failed tomorrow.',
     'Ask someone who did not write the project to follow the README from a clean clone and write down where they got stuck.'
   ];

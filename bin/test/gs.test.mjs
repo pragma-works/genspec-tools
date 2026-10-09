@@ -74,6 +74,7 @@ test('C3 demo <folder> and demo --sample run the quick look and leave the folder
   assert.deepEqual(tree(dir), before);
   const s = gs(TMP, ['demo', '--sample']);
   assert.equal(s.status, 0, s.stderr); assert.match(s.stdout, /Found: E01, E02, E03, E04, E05/);
+  assert.match(s.stdout, /Run the full check inside the project folder: gs check/); assert.ok(!/node tools\/gs-check\/gs-check\.mjs --repo/.test(s.stdout), 'no path into the tool folder');
   const m = gs(TMP, ['demo', path.join(TMP, 'nope')]);
   assert.equal(m.status, 2); assert.match(m.stderr, /was not found/);
 });

@@ -80,7 +80,7 @@ Every criterion below names the test file that checks it, and that test cites th
 ### Acceptance criteria
 
 - F-007.1 An unknown command or an unknown assistant name MUST be refused with exit 2 and nothing written, and the help MUST name every command. verified by: bin/test/gs.test.mjs
-- F-007.2 With no command in a project folder, and with `demo`, gs MUST run the quick look and leave the folder byte for byte as it was. verified by: bin/test/gs.test.mjs
+- F-007.2 With no command in a project folder, and with `demo`, gs MUST run the quick look and leave the folder byte for byte as it was; the next step it prints MUST be `gs check`, not a path into the tool folder. verified by: bin/test/gs.test.mjs
 - F-007.3 `init` with flags MUST ask nothing and write the assistant files asked for; in a terminal it MUST ask the level and the assistants and map the answers; it MUST refuse a home folder or a drive root. verified by: bin/test/gs.test.mjs
 - F-007.4 `init` MUST record every file and block it wrote in `.gs-manifest.json`, and a second run MUST leave the record and the folder byte-identical and make no backup. verified by: bin/test/gs.test.mjs
 - F-007.5 `uninstall` MUST remove what the record says, leave every file of the person's byte for byte (a file changed after it was written is kept), restore the person's own git hook, unset the hooks setting it set, and remove only the folders it emptied. verified by: bin/test/gs.test.mjs
