@@ -872,7 +872,11 @@ function e05(ctx) {
   else {
     const r = sbx.run(cmd, ctx.cfg.timeouts.testMs);
     if (r.timedOut) return res('E05', name, 'UNDETERMINABLE', [`test run timed out: ${cmd}`]);
-    if (r.code !== 0 && /command not found|not recognized|No module named pytest/.test(r.out)) return res('E05', name, 'UNDETERMINABLE', ['tool missing for the test command: ' + cmd]);
+    if (r.code !== 0 && /command not found|not recognized|No module named pytest/.test(r.out)) {
+      // say which tool is missing and why that is probably not the project's fault (the install may have failed), instead of only naming the command
+      const line = (r.out.split('\n').find(l => /command not found|not recognized|No module named pytest/.test(l)) || '').trim().slice(0, 140);
+      return res('E05', name, 'UNDETERMINABLE', [`tool missing for the test command: ${cmd}${line ? ` (${line})` : ''}; the install in the throwaway clone may have failed, so this says nothing about the project's tests`]);
+    }
     testsPass = r.code === 0; if (!testsPass) reasons.push(`test command fails in a clean clone: ${cmd}`);
   }
   sub.tests_pass_in_clean_clone = testsPass; sub.test_cases = tc.cases; sub.test_cases_enough = tc.cases >= ctx.cfg.minTests;
@@ -1855,7 +1859,7 @@ function printReport(report, verbose) {
     const rs = i.reasons || []; for (const r of (verbose ? rs : rs.slice(0, 3))) console.log('      - ' + r);
     if (verbose && i.subflags && Object.keys(i.subflags).length) console.log('      subflags: ' + JSON.stringify(i.subflags));
   }
-  console.log(`summary (${report.mode}): ${JSON.stringify(report.summary)}`);
+  console.log(`summary (${report.mode}; a count of elements by status, not a grade of the project): ${JSON.stringify(report.summary)}`);
   if (report.migration) {
     for (const i of report.migration.items) { console.log(`${i.id} ${i.status.padEnd(14)} ${i.name || ''}`); for (const r of ((i.reasons || []).slice(0, verbose ? 99 : 3))) console.log('      - ' + r); if (verbose && i.evidence && Object.keys(i.evidence).length) console.log('      evidence: ' + JSON.stringify(i.evidence).slice(0, 600)); }
     console.log(`migration summary: ${JSON.stringify(report.migration.summary)}`);

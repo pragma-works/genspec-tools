@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 
 const CHECK = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'gs-check.mjs');
 
-// F-001.7
+// F-001.7, F-001.9
 test('a Readme.md project with tests and no hook: the baseline commit is not reported as blocked', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gscheck-readmecase-'));
   const w = (p, t) => { fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true }); fs.writeFileSync(path.join(dir, p), t); };
@@ -28,5 +28,6 @@ test('a Readme.md project with tests and no hook: the baseline commit is not rep
     const out = r.stdout + r.stderr;
     assert.ok(!/baseline block|clean docs-only commit is blocked/.test(out), out);
     assert.match(out, /E05 /);
+    assert.match(out, /a count of elements by status, not a grade of the project/);
   } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); }
 });
