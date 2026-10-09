@@ -14,6 +14,27 @@ The checks look for twelve things a team can write down and enforce (a spec with
 - **What no tool here can prove:** that a spec describes what the users need; that a test is a good test; that a derived document is true of the code; that nobody skipped the hooks (`git commit --no-verify`); anything about server-side settings such as branch protection or required review, because a clone cannot show them; anything an assistant could fake by writing a file.
 - **Not an audit, not a grade, not a certification.** No tool in this repository prints a score for a project or says that a project is "compliant" or "certified".
 
+## This repository's own status
+
+The repository is checked with its own `gs-check --strict` (`node scripts/self-check.mjs --since a101644`, also run by CI in the Linux job). It was installed at level L1 of `gs-init`, which claims E01 to E03, E06 and E07 and leaves the rest to the project. Measured on 2026-10-09 (Windows, Node 24, commit 023255d):
+
+| Element | Result | Note |
+|---|---|---|
+| E01 sentinel | PASS | `CLAUDE.md` routes to the spec, decisions, open questions, the three derived documents and this README |
+| E02 spec ids | PASS | `docs/spec/SPEC.md`: 6 requirements, 24 criteria, each naming a test file |
+| E03 decisions | PASS | `docs/decisions/0001-...`; its status is still **Proposed**: the owner has not accepted it, and no tool or assistant does that for him |
+| E04 derived documents | PASS | architecture, data model and conventions are short and written by hand; nobody has audited them against the code |
+| E05 tests and a blocking gate | PASS | the pre-commit and pre-push hooks run `npm test`, the fast tier (about 40 seconds). The heavy suites (gs-decide, gs-snapshot, gs-init) and the slow gs-check controls run in `npm run test:quick`, `npm run test:all` and CI, not in the hooks, so a failing edit to one of them is caught on the server, not at commit |
+| E06 ratchet floor | PASS | `docs/baseline.json`: criteria floor 24. The test floor is **0**: the generated gate does not look inside `tools/`, so it counts no tests here and that floor protects nothing |
+| E07 open-questions gate | PASS | `docs/open-questions.md` is empty (no open question), so this says only that the gate would refuse one |
+| E08 criteria coverage | PASS | by mapping: each criterion points at a test file that cites its id at a test definition. This shows that a test is named, not that the test is a good test of the criterion; the 24 mappings were chosen by the person who wrote the spec, which is also the person who wrote the checker's tests |
+| E09 commits | PASS since `a101644`; **PARTIAL over the whole history** | two early assembly commits (62116f5, 57 files; 5f5dedd, 7 files) are not atomic and public history is not rewritten |
+| E10 spec lock | **not met** (PARTIAL) | `gs-lock` is not wired to this repository: no lock file, no tags on the code. L1 leaves it to day 7 to 30 |
+| E11 co-change gate | **not met** (ABSENT) | not wired; and `gs-check` finds no source file outside `tools/` to probe, so it cannot judge it here |
+| E12 README steps | PASS | the commands in this README that do not need a project of yours run from a clean clone |
+
+What this does not show: that the spec is the right spec, that the criteria are all that matters, that a CI re-check is a required check (branch protection is a server setting and is not set by this repository), or that the hooks are installed in your clone (run `node scripts/install-hooks.mjs` once). The same author wrote the tools, the tests, the spec and the mapping between them. It also applies the checker to itself with a configuration the author chose to pass; the E09 start commit is such a choice.
+
 ## Thirty-second quickstart
 
 ```
