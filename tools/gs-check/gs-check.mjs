@@ -1260,6 +1260,8 @@ const KIND = [
 ];
 // A sentence, not a command: five or more words, starts with a capital letter that is not a PowerShell verb, and has no shell syntax in it.
 function looksLikeProse(cmd) {
+  // an ellipsis stands for a value the reader fills in, and `key: value` is a line of a configuration file shown in the same block
+  if (/\.\.\.|…/.test(cmd) || (/^[A-Za-z_][\w.-]*:\s+\S/.test(cmd) && !/^(git|npm|npx|node|python|pip|make|docker)\b/.test(cmd))) return true;
   const words = cmd.trim().split(/\s+/);
   if (words.length < 5 || /^(Get|Set|New|Remove|Invoke|Import|Install|Start|Stop)-/.test(words[0])) return false;
   if (/[|&;<>$=]|\s--?\w/.test(cmd)) return false;
