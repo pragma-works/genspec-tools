@@ -807,7 +807,7 @@ function prepareProbe(ctx) {
   P.ok = true;
   // C0: a clean, conventional, docs-only change must be accepted. If a plain message is refused, retry with a requirement id in the message
   // (a legitimate traceability policy); all later probes then use the accepted message style.
-  const readme = ['README.md', 'readme.md'].find(x => exists(path.join(sbx.root, x))) || 'README.md';
+  const readme = (() => { try { return require('fs').readdirSync(sbx.root).find(n => /^readme\.md$/i.test(n)); } catch { return null; } })() || 'README.md'; // the real file name: a project with Readme.md failed to stage on a case-insensitive file system
   P.readmePath = readme;
   P.c0 = sbx.attemptCommit([{ path: readme, append: '\n<!-- fx1 clean probe -->\n' }], 'docs: fx1 clean probe change', { raw: true });
   if (P.c0.blocked) {
