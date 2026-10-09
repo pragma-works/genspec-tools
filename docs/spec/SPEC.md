@@ -14,6 +14,7 @@ Every criterion below names the test file that checks it, and that test cites th
 - F-001.3 Two runs on the same project MUST give identical statuses and reasons. verified by: tools/gs-check/test/controls.test.mjs
 - F-001.4 The command MUST exit 0 and print twelve PASS lines on a known-good project, and exit 1 on a negative control, with the same statuses on a second run. verified by: tools/gs-check/test/smoke-cli.test.mjs
 - F-001.5 In strict mode a hook that never blocks MUST NOT be credited as a gate. verified by: tools/gs-check/test/smoke-cli.test.mjs
+- F-001.6 A sentinel MUST NOT be reported as pointing to missing files because of a template path with a bracket placeholder or a bare word such as `test`. verified by: tools/gs-check/test/unit.test.mjs
 
 ## F-002 gs-lock notices a change to a locked spec section and gates behaviour changes
 

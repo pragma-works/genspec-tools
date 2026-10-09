@@ -80,3 +80,12 @@ test('C1 refsIn: bare paths in a routing-table file cell and in prose count; red
   assert.ok(refs.includes('docs/architecture.md') && refs.includes('.githooks/commit-msg') && refs.includes('README.md') && refs.includes('docs/spec/SPEC.md'));
   assert.ok(!refs.includes('scripts/planted.test.js'));
 });
+
+// F-001.6
+test('refsIn: a template path with a bracket placeholder is not a route, and a bare word such as `test` is a hint that is not reported when missing', () => {
+  const t = 'Diagrams go in `docs/diagrams/flow-[usecase].md`. Run `test` and look in `scripts` and `docs/real.md`.';
+  const out = u.refsIn(t, cfg);
+  assert.ok(!out.some(x => x.ref.includes('[')), JSON.stringify(out));
+  for (const w of ['test', 'scripts']) { const r = out.find(x => x.ref === w); assert.ok(!r || r.soft === true, w); }
+  assert.ok(out.some(x => x.ref === 'docs/real.md' && x.soft === false));
+});

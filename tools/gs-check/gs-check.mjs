@@ -373,12 +373,12 @@ function refsIn(text, cfg) {
   const add = (raw, fromLink) => {
     let r = raw.trim().replace(/^\.\//, '').replace(/[#?].*$/, '').replace(/[.,;:)]+$/, '');
     if (!r || ignore.some(re => re.test(r))) return;
-    if (/[\s*<>{}$|\\^~=:]/.test(r) || r.startsWith('-') || r.startsWith('@') || r.startsWith('/')) return; // ':' also drops resource URIs and route templates
+    if (/[\s*<>{}$|\\^~=:\[\]]/.test(r) || r.startsWith('-') || r.startsWith('@') || r.startsWith('/')) return; // ':' also drops resource URIs and route templates
     const ext = (r.match(/\.([A-Za-z0-9]+)$/) || [])[1];
     const knownExt = !!(ext && exts.has(ext.toLowerCase()));
     const knownDir = /^(docs|doc|src|tests?|scripts|lib|app|adr|decisions|\.github|\.githooks|\.husky|\.claude|\.cursor)(\/|$)/i.test(r);
     if (!knownExt && !knownDir) return; // prose such as "and/or", unit lists, API paths, runtime data without a known extension
-    const soft = !fromLink && !knownDir && !r.includes('/');
+    const soft = !fromLink && !r.includes("/"); // a bare word such as `test` or `scripts` is a hint, not a promise: when it is missing it is not reported
     if (!refs.has(r) || (refs.get(r) && !soft)) refs.set(r, soft);
   };
   for (const m of t.matchAll(/\]\(([^)\s]+)\)/g)) add(m[1], true);
