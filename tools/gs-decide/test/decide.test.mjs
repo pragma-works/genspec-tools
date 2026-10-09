@@ -77,6 +77,7 @@ test('T2 the entry hash is a pinned vector (same on Windows and Linux)', async (
   assert.equal(m.contentHash('a\r\nb\r\n'), m.contentHash('a\nb\n')); assert.equal(m.contentHash('﻿a\n'), m.contentHash('a\n'));
 });
 
+// F-003.1
 test('T3 TAMPER: editing the reason of an old entry is detected', () => {
   const P = proj(); P.approve('docs/spec/SPEC.md'); P.approve('CLAUDE.md');
   P.w('docs/decisions.log.md', logOf(P).replace('reviewed the change', 'rubber stamped the change'));
@@ -151,6 +152,7 @@ test('T10 a waiver needs an expiry (within the maximum), a real date, and an anc
   assert.equal(P.decide(...base, '--covers', 'docs/ratchet.json', '--expires', '2026-11-01').status, 0);
 });
 
+// F-003.3
 test('T11 EXPIRED: an open waiver past its date fails verify; closing it, or renewing it, clears it', () => {
   const P = proj(); P.decide('add', '--kind', 'waiver', '--role', 'tech lead', '--covers', 'docs/ratchet.json', '--expires', '2026-10-20', '--why', 'floor waived until the migration lands');
   assert.equal(P.verify('2026-10-10').status, 0); assert.match(out(P.verify('2026-10-10')), /EXPIRING-SOON D-0001/);
@@ -215,6 +217,7 @@ test('T16 HOOK: an unprotected change passes, with no log at all', () => {
   const r = P.try('feat: change the balance (AC-001)'); assert.equal(r.status, 0, out(r)); assert.match(out(r), /no protected path touched/);
 });
 
+// F-003.2
 test('T17 HOOK refuses a spec change without an entry, then accepts it with one (same commit)', () => {
   const P = proj(); P.w('docs/spec/SPEC.md', SPEC + '- [ ] AC-003 A non-integer entry throws.\n');
   const red = P.try('docs: add AC-003'); assert.equal(red.status, 1); assert.match(out(red), /docs\/spec\/SPEC\.md \(spec\) changed with no ratification entry/);
@@ -268,6 +271,7 @@ test('T22 HOOK: a new entry must be signed with the committer identity', () => {
   P.approve('.gs.json', 'gate');
 });
 
+// F-003.4
 test('T23 HOOK: AI co-author trailer: an agent-suspected entry does not approve; a human entry does; a lone AI-recorded entry is flagged', () => {
   const P = proj(); P.w('docs/spec/SPEC.md', SPEC + '- [ ] AC-003 New behaviour.\n');
   P.decide('add', '--kind', 'spec', '--role', 'tech lead', '--covers', 'docs/spec/SPEC.md', '--agent', '--why', 'recorded by an agent session on the person\'s behalf');

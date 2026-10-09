@@ -65,6 +65,7 @@ test('S1 a hand-built project: criteria, tests, ratchet, spec digest and the lin
   assert.match(out(r), /written: docs[\\/]snapshots[\\/]snapshot-2026-10-01\.md/);
 });
 
+// F-004.1
 test('S2 deterministic: the same state and date give identical bytes, twice', () => {
   const P = proj(); P.snap('--date', '2026-10-01', '--no-check'); const a = [P.read('docs/snapshots/snapshot-2026-10-01.md'), P.read('docs/snapshots/snapshot-2026-10-01.json')];
   P.snap('--date', '2026-10-01', '--no-check'); assert.deepEqual([P.read('docs/snapshots/snapshot-2026-10-01.md'), P.read('docs/snapshots/snapshot-2026-10-01.json')], a);
@@ -73,6 +74,7 @@ test('S2 deterministic: the same state and date give identical bytes, twice', ()
   assert.equal(P.snap('--date', '2026-10-01', '--no-check', '--dry-run').status, 0);
 });
 
+// F-004.2
 test('S3 a missing checker is SAID, not guessed (the tool is run from a folder with no sibling gs-check)', () => {
   const P = proj(); const iso = mkdtempSync(join(tmpdir(), 'gssnap-tool-')); mkdirSync(join(iso, 'a/b/tools/gs-snapshot'), { recursive: true });
   copyFileSync(SNAP, join(iso, 'a/b/tools/gs-snapshot/gs-snapshot.mjs'));
@@ -183,6 +185,7 @@ test('S12 a snapshot dated between two others diffs against the one before it; -
   assert.match(P.json('2026-10-14').drift.note, /not in this history/);
 });
 
+// F-004.3
 test('S13 KPIs and the audit are SUPPLIED, never computed: absent they are empty/n-a, present they carry their source and the label "supplied"', () => {
   const P = proj(); P.snap('--date', '2026-10-01', '--no-check'); let s = P.json('2026-10-01');
   assert.equal(s.kpis.supplied, false); assert.deepEqual(s.kpis.entries, []); assert.equal(s.audit, null); assert.match(P.read('docs/snapshots/snapshot-2026-10-01.md'), /OPTIONAL FIELD.*never computed or invented/); assert.match(P.read('docs/snapshots/snapshot-2026-10-01.md'), /None supplied/);

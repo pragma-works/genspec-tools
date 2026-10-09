@@ -33,6 +33,7 @@ function verify(variantId) {
 }
 
 for (const id of ['G1', 'G3', 'GS1']) {
+  // F-001.4
   test(`smoke ${id}: known-good, the formula's command exits 0 and prints twelve PASS lines, twice the same`, { timeout: 1500000 }, () => {
     const x = verify(id);
     assert.strictEqual(x.r1.status, 0, x.r1.stdout.slice(-1500));
@@ -45,6 +46,7 @@ for (const id of ['G1', 'G3', 'GS1']) {
 // negative controls: [variant, the items that must NOT be PASS in strict mode]
 const NEG = [['R06', ['E05', 'E06', 'E07', 'E10', 'E11']], ['B05', ['E05']], ['X01', ['E05', 'E11']], ['R11', ['E10']], ['GS2', ['E10']], ['GS3', ['E10']], ['GS6', ['E11']], ['GS8', ['E07', 'E10']]];
 for (const [id, bad] of NEG) {
+  // F-001.5
   test(`smoke ${id}: negative control, the formula's command exits 1 and the statuses of ${bad.join(', ')} are not PASS`, { timeout: 1500000 }, () => {
     const x = verify(id);
     assert.strictEqual(x.r1.status, 1, x.r1.stdout.slice(-1500));

@@ -54,6 +54,7 @@ const commit = (dir, msg, files = {}) => {
   return git(dir, 'commit', '-q', '-m', msg);
 };
 
+// F-005.1
 test('G1 dry run writes nothing, not even a repository', () => {
   const dir = project(NODE_PROJECT, { repo: false });
   const before = snapshot(dir);
@@ -99,6 +100,7 @@ test('G3 L1 on a python project: gate, hooks, floor measured from the tests foun
   assert.equal(read(dir, '.githooks/pre-commit').includes('\r'), false);
 });
 
+// F-005.2
 test('G4 idempotent: a second run changes nothing and makes no backup', () => {
   const dir = project(NODE_PROJECT);
   assert.equal(init(dir, '--level', 'L1').status, 0);
@@ -110,6 +112,7 @@ test('G4 idempotent: a second run changes nothing and makes no backup', () => {
   assert.equal(has(dir, '.gs-init-backup'), false);
 });
 
+// F-005.5
 test('G5 an existing .git/hooks pre-commit is carried over and still runs; a bad message is refused, a good one accepted', () => {
   const dir = project(NODE_PROJECT);
   fs.writeFileSync(path.join(dir, '.git/hooks/pre-commit'), '#!/bin/sh\necho ran >> "$PWD/hook-ran.log"\n', { mode: 0o755 });
@@ -160,6 +163,7 @@ test('G7 an existing hook that is not a shell script is kept as .gs-prev and sti
   assert.ok(has(dir, 'node-hook-ran.log'), 'the node hook must have run');
 });
 
+// F-005.3
 test('G8 backups: your sentinel, README and .gs.json get a block or a key, never a replacement; your spec is kept; a changed generated file is backed up', () => {
   const myClaude = '# My project\n\nMy own rules. Do not touch.\n';
   const myReadme = '# Demo\n\nHow to build it.\n';
@@ -215,6 +219,7 @@ test('G10 missing tools: said honestly with where to fetch; L2 without gs-decide
   assert.equal(has(dir, 'tools'), false);
 });
 
+// F-005.4
 test('G11 the gate: red and green for spec shape, open question, ratchet floor and a typed message', () => {
   const dir = project(NODE_PROJECT);
   assert.equal(init(dir, '--level', 'L1').status, 0);

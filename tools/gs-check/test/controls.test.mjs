@@ -24,6 +24,7 @@ const compare = (rep, expect, label) => {
 
 for (const v of variants) {
   if (only && !only.includes(v.id)) continue;
+  // F-001.1
   test(`${v.id} ${v.kind}: ${v.desc}`, { timeout: 900000 }, () => {
     const dir = buildVariant(v);
     try {
@@ -35,6 +36,7 @@ for (const v of variants) {
   });
 }
 
+// F-001.3
 test('determinism: two runs on the known-good project give identical statuses and reasons', { timeout: 300000, skip: !!only }, () => {
   const dir = buildVariant(variants[0]);
   try {
@@ -43,6 +45,7 @@ test('determinism: two runs on the known-good project give identical statuses an
   } finally { cleanup(dir); }
 });
 
+// F-001.2
 test('the checker never modifies the repository under test', { timeout: 300000, skip: !!only }, () => {
   const { git } = internals.util;
   const dir = buildVariant(variants[0]);

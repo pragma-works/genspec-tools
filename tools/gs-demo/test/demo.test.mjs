@@ -90,6 +90,7 @@ test('D4 removed and broken elements are named: no spec, a stale lock, sloppy hi
   }
 });
 
+// F-006.1
 test('D5 the original is never modified (content, listing) and no temporary copy is left behind', () => {
   const dir = buildGood();
   try {
@@ -102,6 +103,7 @@ test('D5 the original is never modified (content, listing) and no temporary copy
   } finally { cleanup(dir); }
 });
 
+// F-006.2
 test('D6 the output never says "governed", never grades, and always ends with the quick-look line', () => {
   for (const make of [() => buildGood(), bare, () => variant('X01')]) {
     const dir = make();
@@ -116,6 +118,7 @@ test('D6 the output never says "governed", never grades, and always ends with th
   }
 });
 
+// F-006.3
 test('D7 a very large folder is refused with a clear message and nothing is copied', () => {
   const dir = buildGood();
   try {

@@ -65,6 +65,7 @@ const fingerprint = () => out(sh(P.dir, process.execPath, ['-e', 'const g=requir
 // ======================= P: ported scenarios (lock) =======================
 test('P1 clean state: no finding, the lock is current', () => { P.reset(); const r = P.lock('check'); assert.equal(r.status, 0, out(r)); assert.match(out(r), /all current/); });
 
+// F-002.1
 test('P2 a spec criterion is reworded: the derived test is STALE and the lock is behind', () => {
   P.reset(); reword(); const r = P.lock('check');
   assert.equal(r.status, 1); assert.match(out(r), /STALE tests\/ids\.test\.js:\d+ F-007\.C1/); assert.match(out(r), /LOCK-BEHIND .*#criterion-1/);
@@ -90,6 +91,7 @@ test('P6 a criterion inserted BEFORE the covered one renumbers it: the tag still
   const r = P.lock('check'); assert.equal(r.status, 1); assert.doesNotMatch(out(r), /MISSING-SOURCE/); assert.match(out(r), /STALE tests\/ids\.test\.js/);
 });
 
+// F-002.2
 test('P7 ratify without --reason is refused (exit 2); a short reason too', () => {
   P.reset(); reword();
   assert.equal(P.lock('ratify', TEST).status, 2); assert.equal(P.lock('ratify', TEST, '--reason', 'too short').status, 2);
@@ -191,6 +193,7 @@ test('P22 a mechanical rename typed refactor: the parent tests pass unchanged', 
   const r = P.co('--msg-file', P.msg('refactor: rename the local variable')); assert.equal(r.status, 0, out(r)); assert.match(out(r), /pass unchanged/);
 });
 
+// F-002.3
 test('P23 a behaviour change (refund at any time) called a refactor: NOT A REFACTOR', () => {
   P.reset(); P.w(RES, P.read(RES).replace('hoursAhead > 24', 'hoursAhead > 0')); P.g('add', '-A');
   const r = P.co('--msg-file', P.msg('refactor: tidy the refund')); assert.equal(r.status, 1); assert.match(out(r), /NOT A REFACTOR/);
@@ -206,11 +209,13 @@ test('P25 LIMIT, recorded as a scenario: a change the tests do not pin (24 -> 12
   assert.equal(P.co('--msg-file', P.msg('refactor: tidy the refund')).status, 0);
 });
 
+// F-002.4
 test('P26 source change with no id, no spec and no refactor is rejected', () => {
   P.reset(); P.w(RES, P.read(RES) + '// touched\n'); P.g('add', '-A');
   const r = P.co('--msg-file', P.msg(noCite)); assert.equal(r.status, 1); assert.match(out(r), /must cite an id/);
 });
 
+// F-002.4
 test('P27 citing an id the spec defines is accepted', () => {
   P.reset(); P.w(RES, P.read(RES) + '// touched\n'); P.g('add', '-A');
   assert.equal(P.co('--msg-file', P.msg('feat: refund window (F-007.R1)')).status, 0);
