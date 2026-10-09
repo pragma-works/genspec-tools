@@ -221,6 +221,15 @@ test('D17 E05: a CI step that runs the tests through make ci, tox or just is rec
     try { assert.strictEqual(status(lookAt(dir), 'E05'), expected, cmd); } finally { cleanup(dir); }
   }
 });
+// F-006.8
+test('D20 E02/E08: ids listed under any heading are checked against the tests; a decision-record id is not a requirement; one id is not a spec', () => {
+  const dir = withFiles({ 'docs/spec/SPEC.md': '# Spec\n\n## Requirements\n\n- REQ-001 a\n- REQ-002 b\n- REQ-003 c\n', 'tests/a.test.js': "test('REQ-001 REQ-002 REQ-003', () => {});\n" });
+  try { const look = lookAt(dir); assert.strictEqual(status(look, 'E02'), 'found'); assert.strictEqual(status(look, 'E08'), 'found', JSON.stringify(look.results.E08)); } finally { cleanup(dir); }
+  const dir2 = withFiles({ 'docs/specs/notes.md': '# Notes\n\n- ADR-0001 use a database\n- ADR-0002 use a queue\n- ADR-0003 use a cache\n' });
+  try { assert.strictEqual(status(lookAt(dir2), 'E02'), 'weak'); assert.match(lookAt(dir2).results.E02.note, /no numbered ids/); } finally { cleanup(dir2); }
+  const dir3 = withFiles({ 'docs/spec/SPEC.md': '# Spec\n\n- REQ-001 only one\n' });
+  try { const n = lookAt(dir3).results.E02; assert.strictEqual(n.status, 'weak'); assert.match(n.note, /only 1 numbered id/); } finally { cleanup(dir3); }
+});
 // F-006.7
 test('D18 a folder that is mostly documents gets a note that the checks are for code projects; a code project does not', () => {
   const docs = {}; for (let i = 0; i < 12; i++) docs[`notes/n${i}.md`] = `# Note ${i}\n\ntext\n`;

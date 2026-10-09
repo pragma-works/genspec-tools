@@ -164,7 +164,7 @@ function specInfo(c) {
     let heading = '';
     for (const line of (c.text(f) || '').split('\n')) {
       const h = line.match(/^#{1,6}\s+(.*)$/); if (h) { heading = h[1]; continue; }
-      const m = line.match(LEADING_ID); if (!m) continue;
+      const m = line.match(LEADING_ID); if (!m || /^ADR/.test(m[1])) continue; // a decision-record id is not a requirement
       // spec-kit layout: each feature folder (specs/001-name/) numbers its own FR-001, so the same id in two folders is not a duplicate
       const feat = (f.match(/(^|\/)specs?\/(\d{2,4}[-_][^/]+)\//i) || [])[2] || '';
       if (feat) perFeature = true;
@@ -173,7 +173,7 @@ function specInfo(c) {
       if (/criteri|accept|aceptaci/i.test(heading) || /^(AC|CR|CRIT)\b/.test(m[1])) crit.push(m[1]);
     }
   }
-  return { specFiles, perFeature, ids: [...bare], idCount: seen.size, dupes: [...dupes], criteria: [...new Set(crit.length ? crit : [...seen])] };
+  return { specFiles, perFeature, ids: [...bare], idCount: seen.size, dupes: [...dupes], criteria: [...new Set(crit.length ? crit : [...bare])] };
 }
 
 const R = (status, note) => ({ status, note });
@@ -200,6 +200,7 @@ function e02(c, S) {
   if (!S.specFiles.length) return missing('no spec file found (docs/spec/SPEC.md, docs/specs/, SPEC.md).' + toolNote);
   if (!S.ids.length) return weak('a spec file exists but defines no numbered ids (like REQ-001 or AC-001).' + toolNote);
   if (S.dupes.length) return weak(`id defined twice: ${S.dupes.slice(0, 4).join(', ')}`);
+  if (S.idCount < 3) return weak(`only ${S.idCount} numbered id(s) (${S.ids.join(', ')}); a spec usually states several requirements`);
   if (!S.criteria.length) return weak('requirement ids found but no acceptance criteria');
   return found(`${S.idCount} numbered ids, ${S.criteria.length} acceptance criteria, no duplicates${S.perFeature ? ' (ids are numbered per feature folder)' : ''}`);
 }
