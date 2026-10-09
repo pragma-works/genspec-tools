@@ -73,7 +73,7 @@ test('C3 demo <folder> and demo --sample run the quick look and leave the folder
   assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /The three most valuable next steps/); assert.match(r.stdout, /nothing was changed/);
   assert.deepEqual(tree(dir), before);
   const s = gs(TMP, ['demo', '--sample']);
-  assert.equal(s.status, 0, s.stderr); assert.match(s.stdout, /9 of the 12 elements are there/);
+  assert.equal(s.status, 0, s.stderr); assert.match(s.stdout, /Found: E01, E02, E03, E04, E05/);
   const m = gs(TMP, ['demo', path.join(TMP, 'nope')]);
   assert.equal(m.status, 2); assert.match(m.stderr, /was not found/);
 });
