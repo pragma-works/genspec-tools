@@ -158,18 +158,22 @@ function routesFrom(c, relFile) {
 function nonEmptyRoute(c, r) { if (c.has(r)) return nonBlank(c.text(r)) > 0; return c.files.some(f => f.startsWith(r + '/')); }
 
 function specInfo(c) {
-  const specFiles = c.files.filter(f => /^(docs?\/)?(specs?|features)\/.+\.md$/i.test(f) || /^(docs?\/)?spec(ification)?\.md$/i.test(f) || /^SPEC\.md$/i.test(f));
-  const defs = [], dupes = new Set(), seen = new Set(); const crit = [];
+  const specFiles = c.files.filter(f => /^((docs?|openspec|\.kiro)\/)?(specs?|features)\/.+\.md$/i.test(f) || /^(docs?\/)?spec(ification)?\.md$/i.test(f) || /^SPEC\.md$/i.test(f));
+  const defs = [], dupes = new Set(), seen = new Set(), bare = new Set(); const crit = []; let perFeature = false;
   for (const f of specFiles) {
     let heading = '';
     for (const line of (c.text(f) || '').split('\n')) {
       const h = line.match(/^#{1,6}\s+(.*)$/); if (h) { heading = h[1]; continue; }
       const m = line.match(LEADING_ID); if (!m) continue;
-      defs.push(m[1]); if (seen.has(m[1])) dupes.add(m[1]); seen.add(m[1]);
+      // spec-kit layout: each feature folder (specs/001-name/) numbers its own FR-001, so the same id in two folders is not a duplicate
+      const feat = (f.match(/(^|\/)specs?\/(\d{2,4}[-_][^/]+)\//i) || [])[2] || '';
+      if (feat) perFeature = true;
+      const key = feat + '|' + m[1];
+      defs.push(m[1]); if (seen.has(key)) dupes.add(m[1]); seen.add(key); bare.add(m[1]);
       if (/criteri|accept|aceptaci/i.test(heading) || /^(AC|CR|CRIT)\b/.test(m[1])) crit.push(m[1]);
     }
   }
-  return { specFiles, ids: [...seen], dupes: [...dupes], criteria: [...new Set(crit.length ? crit : [...seen])] };
+  return { specFiles, perFeature, ids: [...bare], idCount: seen.size, dupes: [...dupes], criteria: [...new Set(crit.length ? crit : [...seen])] };
 }
 
 const R = (status, note) => ({ status, note });
@@ -185,12 +189,19 @@ function e01(c) {
   if (docs.length < 2) return weak(`${file} routes to ${docs.length} document(s); a sentinel should route to the spec, architecture, conventions and decisions`);
   return found(`${file} routes to ${docs.length} existing documents`);
 }
+// folders that tools for spec-driven development create; named so that a project using them is not told it has nothing
+function toolFolders(c) {
+  const marks = [['.specify/', 'spec-kit'], ['openspec/', 'OpenSpec'], ['_bmad/', 'BMAD'], ['.bmad-core/', 'BMAD'], ['.kiro/specs/', 'Kiro']];
+  return marks.filter(([p]) => c.files.some(f => f.startsWith(p))).map(([p, n]) => `${n}: ${p}`);
+}
 function e02(c, S) {
-  if (!S.specFiles.length) return missing('no spec file found (docs/spec/SPEC.md, docs/specs/, SPEC.md)');
-  if (!S.ids.length) return weak('a spec file exists but defines no numbered ids (like REQ-001 or AC-001)');
+  const tool = toolFolders(c);
+  const toolNote = tool.length ? ` A spec-driven tool folder is present (${tool.join(', ')}); its specs count only if they sit under specs/ or docs/spec(s)/ and start their lines with ids like FR-001.` : '';
+  if (!S.specFiles.length) return missing('no spec file found (docs/spec/SPEC.md, docs/specs/, SPEC.md).' + toolNote);
+  if (!S.ids.length) return weak('a spec file exists but defines no numbered ids (like REQ-001 or AC-001).' + toolNote);
   if (S.dupes.length) return weak(`id defined twice: ${S.dupes.slice(0, 4).join(', ')}`);
   if (!S.criteria.length) return weak('requirement ids found but no acceptance criteria');
-  return found(`${S.ids.length} numbered ids, ${S.criteria.length} acceptance criteria, no duplicates`);
+  return found(`${S.idCount} numbered ids, ${S.criteria.length} acceptance criteria, no duplicates${S.perFeature ? ' (ids are numbered per feature folder)' : ''}`);
 }
 function e03(c) {
   const dir = ['docs/decisions', 'docs/adr', 'docs/adrs', 'adr', 'adrs', 'doc/adr', 'docs/architecture/decisions', 'decisions'].find(d => c.files.some(f => f.startsWith(d + '/') && f.endsWith('.md')));
@@ -278,7 +289,7 @@ function e08(c, S) {
   const uncovered = S.criteria.filter(id => !testText.includes(id) && !covText.includes(id));
   if (!cov.length && !testText) return missing('no coverage table and no tests that cite criterion ids');
   if (uncovered.length) return weak(`${uncovered.length} of ${S.criteria.length} criteria are in no test and no coverage table: ${uncovered.slice(0, 5).join(', ')}`);
-  return found(`all ${S.criteria.length} criteria appear in a test or in the coverage table (a mention, not proof that the test checks it)`);
+  return found(`all ${S.criteria.length} criteria appear in a test or in the coverage table (a mention, not proof that the test checks it${S.perFeature ? '; ids repeat across feature folders, so a mention of one id cannot say which feature it covers' : ''})`);
 }
 function e09(c, orig, gitOk) {
   if (!gitOk) return skipped('the git history was not available or was too large to copy');

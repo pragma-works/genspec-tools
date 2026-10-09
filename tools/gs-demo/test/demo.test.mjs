@@ -201,3 +201,25 @@ test('D14 E01: a real missing document is still named, with the note that it may
     assert.match(look.results.E01.note, /advice/);
   } finally { cleanup(dir); }
 });
+
+// F-006.5
+test('D15 E02: the same id in two feature folders (spec-kit layout) is not a duplicate', () => {
+  const spec = n => `# Feature ${n}\n\n## Requirements\n\n- **FR-001**: the system MUST do the thing\n- **FR-002**: the system MUST do the other thing\n\n## Acceptance criteria\n\n- AC-001 the thing happens\n`;
+  const dir = withFiles({ 'specs/001-first/spec.md': spec(1), 'specs/002-second/spec.md': spec(2) });
+  try {
+    const look = lookAt(dir);
+    assert.strictEqual(status(look, 'E02'), 'found', JSON.stringify(look.results.E02));
+    assert.match(look.results.E02.note, /per feature folder/);
+  } finally { cleanup(dir); }
+  const dir2 = withFiles({ 'docs/spec/SPEC.md': '# S\n\n- FR-001 a\n- FR-001 b\n\n## Acceptance criteria\n\n- AC-001 c\n' });
+  try { assert.strictEqual(status(lookAt(dir2), 'E02'), 'weak'); } finally { cleanup(dir2); } // a real duplicate inside one file is still caught
+});
+// F-006.5
+test('D16 E02: a project with a spec-driven tool folder is told which folder was seen and what is read', () => {
+  const dir = withFiles({ '.specify/memory/constitution.md': '# C\n', 'openspec/changes/x/proposal.md': '# P\n' });
+  try {
+    const n = lookAt(dir).results.E02.note;
+    assert.match(n, /spec-kit: \.specify\//);
+    assert.match(n, /OpenSpec: openspec\//);
+  } finally { cleanup(dir); }
+});
