@@ -20,6 +20,8 @@ jobs:
         node: [20, 22]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
@@ -32,3 +34,8 @@ jobs:
       - run: git config --global user.name "ci" && git config --global user.email "ci@example.com"
       - run: git config --global init.defaultBranch main
       - run: node scripts/run-tests.mjs
+      # the repository checks itself with its own gs-check in strict mode (Linux and one Node version only: it takes minutes, and about ten on Windows)
+      # E09 is judged since the commit before the adoption of the L1 setup; see README, "This repository's own status"
+      - name: gs-check strict on this repository
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: node scripts/self-check.mjs --since a101644
