@@ -23,10 +23,18 @@ for (const dir of [...readdirSync(join(ROOT, 'tools')).sort().map(tool => join(R
 }
 const chosen = suites.filter(s => ((!quick && !fast) || !SLOW.test(s)) && (!fast || !HEAVY.test(s)) && (!words.length || words.some(w => s.includes(w))));
 
+// a git hook runs with GIT_DIR, GIT_INDEX_FILE and similar set; the fixtures run git in temporary folders and must not inherit them,
+// or their commits land in the repository being committed to (seen when the hook ran npm test from a linked worktree)
+function cleanEnv() {
+  const env = { ...process.env };
+  for (const k of Object.keys(env)) if (/^GIT_(DIR|INDEX_FILE|WORK_TREE|PREFIX|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|COMMON_DIR|NAMESPACE|AUTHOR_.*|COMMITTER_.*|EDITOR|REFLOG_ACTION)$/.test(k)) delete env[k];
+  return env;
+}
+
 function runOne(file) {
   return new Promise(res => {
     const t0 = Date.now(); let out = '';
-    const p = spawn(process.execPath, ['--test', '--test-reporter=tap', file], { cwd: ROOT, env: { ...process.env } });
+    const p = spawn(process.execPath, ['--test', '--test-reporter=tap', file], { cwd: ROOT, env: cleanEnv() });
     p.stdout.on('data', d => out += d); p.stderr.on('data', d => out += d);
     p.on('close', code => {
       const n = k => Number((out.match(new RegExp('^# ' + k + ' ([0-9]+)', 'm')) || [0, 0])[1]);
