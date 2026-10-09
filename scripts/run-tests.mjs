@@ -2,6 +2,7 @@
 // Runs every test suite of the repository, one node process per suite, and prints a count per suite and a total.
 //   node scripts/run-tests.mjs              all suites (the gs-check controls take minutes: about 20 on Windows, 4 on Linux)
 //   node scripts/run-tests.mjs --quick      all but the gs-check controls and migration suites
+//   node scripts/run-tests.mjs --fast       only the fast suites (gs-check unit, gs-lock, gs-demo): what the pre-commit hook runs, about 40 s
 //   node scripts/run-tests.mjs gs-demo      only the suites whose path contains the word
 // Exit 0 only if every suite has no failure and ran at least one test.
 import { spawn } from 'node:child_process';
@@ -10,7 +11,8 @@ import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const args = process.argv.slice(2), quick = args.includes('--quick'), words = args.filter(a => !a.startsWith('--'));
+const args = process.argv.slice(2), quick = args.includes('--quick'), fast = args.includes('--fast'), words = args.filter(a => !a.startsWith('--'));
+const FAST = /unit.test|gs-lock.test|demo.test/;
 const SLOW = /smoke-cli.test|controls\.test|migration\.test|sync\.test/;
 
 const suites = [];
@@ -19,7 +21,7 @@ for (const tool of readdirSync(join(ROOT, 'tools')).sort()) {
   if (!existsSync(dir)) continue;
   for (const f of readdirSync(dir).sort()) if (f.endsWith('.test.mjs')) suites.push(join(dir, f));
 }
-const chosen = suites.filter(s => (!quick || !SLOW.test(s)) && (!words.length || words.some(w => s.includes(w))));
+const chosen = suites.filter(s => (!quick || !SLOW.test(s)) && (!fast || FAST.test(s)) && (!words.length || words.some(w => s.includes(w))));
 
 function runOne(file) {
   return new Promise(res => {
