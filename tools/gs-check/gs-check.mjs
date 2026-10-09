@@ -268,13 +268,24 @@ function cleanEnv(extra = {}) {
       GIT_CONFIG_GLOBAL: empty, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0',
       GIT_AUTHOR_NAME: 'fx1-checker', GIT_AUTHOR_EMAIL: 'fx1@example.invalid',
       GIT_COMMITTER_NAME: 'fx1-checker', GIT_COMMITTER_EMAIL: 'fx1@example.invalid',
-      CI: '', FORCE_COLOR: '0', NO_COLOR: '1'
+      CI: '', FORCE_COLOR: '0', NO_COLOR: '1',
+      // (scan, 2026-10-09) a README or default `pip install` ran in the Python of the machine that runs the checker and added 20 packages to it.
+      // pip now refuses to install outside a virtual environment, and a Python project gets its own (see setPythonVenv).
+      PIP_REQUIRE_VIRTUALENV: 'true'
     };
     // The checker may itself run under `node --test` or `npm test`; scrub what would change how the project's own tools behave
     // (a child `node --test` that sees NODE_TEST_CONTEXT silently skips running files and reports success).
     for (const k of Object.keys(_env)) if (/^(NODE_TEST_CONTEXT|NODE_OPTIONS|NODE_ENV|INIT_CWD|npm_.*)$/i.test(k)) delete _env[k];
   }
   return { ..._env, ...extra };
+}
+// Put a throwaway virtual environment first on the PATH of everything the checker runs from now on (replacing the previous one).
+function setPythonVenv(venvDir) {
+  cleanEnv();
+  const bin = path.join(venvDir, process.platform === 'win32' ? 'Scripts' : 'bin');
+  const parts = String(_env.PATH || _env.Path || '').split(path.delimiter).filter(p => p && p !== _env.__fx1VenvBin);
+  _env.__fx1VenvBin = bin; _env.VIRTUAL_ENV = venvDir; delete _env.PYTHONHOME;
+  const joined = [bin, ...parts].join(path.delimiter); _env.PATH = joined; if ('Path' in _env) _env.Path = joined;
 }
 
 // Run a shell command line with bash (Git Bash on Windows). Returns {code, out, timedOut}.
@@ -399,7 +410,7 @@ function resolveRef(root, fromFile, ref) {
   return null;
 }
 
-module.exports = { posix, sha256, exists, read, tryRead, cleanEnv, sh, smoke, git, walk, relList, trackedFiles, slug, stripFences, fences, sections, normalizeSection, sectionHash, leadingId, refsIn, resolveRef };
+module.exports = { posix, sha256, exists, read, tryRead, cleanEnv, setPythonVenv, sh, smoke, git, walk, relList, trackedFiles, slug, stripFences, fences, sections, normalizeSection, sectionHash, leadingId, refsIn, resolveRef };
 
 };
 
@@ -409,7 +420,7 @@ __defs["./sandbox"] = (module, exports, require) => {
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { sh, smoke, git, exists, read, tryRead, posix } = require('./util');
+const { sh, smoke, git, exists, read, tryRead, posix, setPythonVenv } = require('./util');
 
 class Sandbox {
   constructor(repo, cfg, label) {
@@ -425,9 +436,22 @@ class Sandbox {
     const r = git(this.dir, ['clone', '--no-hardlinks', '-q', this.repo, this.root]);
     this.log.push({ step: 'clone', code: r.code });
     if (r.code !== 0) return { ok: false, out: r.out };
+    this.isolatePython();
     this.head = git(this.root, ['rev-parse', 'HEAD']).stdout.trim();
     this.branch = git(this.root, ['symbolic-ref', '--short', 'HEAD']).stdout.trim() || 'HEAD';
     return { ok: !!this.head };
+  }
+  // A Python project is installed and tested in a virtual environment of its own, inside the throwaway folder, never in the Python of this machine.
+  isolatePython() {
+    const isPy = ['pyproject.toml', 'requirements.txt', 'requirements-dev.txt', 'setup.py', 'setup.cfg'].some(f => exists(path.join(this.root, f)));
+    if (!isPy) return false;
+    const venv = path.join(this.dir, 'fx1venv');
+    const vp = venv.split(path.sep).join("/");
+    const r = sh(`(command -v python3 >/dev/null 2>&1 && python3 -m venv "${vp}") || python -m venv "${vp}"`, { cwd: this.dir, timeout: 180000 });
+    this.log.push({ step: 'python venv', code: r.code });
+    if (r.code !== 0 || !exists(venv)) return false; // pip will then refuse to install (PIP_REQUIRE_VIRTUALENV), which is better than changing this machine
+    setPythonVenv(venv);
+    return true;
   }
   runSmoke(cmd, timeout) { const r = smoke(cmd, { cwd: this.root, timeout }); this.log.push({ step: 'smoke ' + cmd, code: r.code }); return r; }
   run(cmd, timeout) { const r = sh(cmd, { cwd: this.root, timeout }); this.log.push({ step: cmd, code: r.code }); return r; }
@@ -1904,6 +1928,6 @@ module.exports.cli = function cli(argv) {
 
 const __util = __require('./util'), __items = __require('./items'), __checker = __require('./checker');
 export const run = __checker.run;
-export const internals = { util: __util, items: __items };
+export const internals = { util: __util, items: __items, sandbox: __require('./sandbox') };
 export const defaultConfig = DEFAULT_CONFIG;
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) __checker.cli(process.argv.slice(2));

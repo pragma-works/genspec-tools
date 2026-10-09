@@ -21,11 +21,11 @@ The repository is checked with its own `gs-check --strict` (`node scripts/self-c
 | Element | Result | Note |
 |---|---|---|
 | E01 sentinel | PASS | `CLAUDE.md` routes to the spec, decisions, open questions, the three derived documents and this README |
-| E02 spec ids | PASS | `docs/spec/SPEC.md`: 7 requirements, 45 criteria, each naming a test file |
+| E02 spec ids | PASS | `docs/spec/SPEC.md`: 7 requirements, 46 criteria, each naming a test file |
 | E03 decisions | PASS | `docs/decisions/0001-...`; its status is still **Proposed**: the owner has not accepted it, and no tool or assistant does that for him |
 | E04 derived documents | PASS | architecture, data model and conventions are short and written by hand; nobody has audited them against the code |
 | E05 tests and a blocking gate | PASS | the pre-commit and pre-push hooks run `npm test`, the fast tier (about 40 seconds). The heavy suites (gs-decide, gs-snapshot, gs-init) and the slow gs-check controls run in `npm run test:quick`, `npm run test:all` and CI, not in the hooks, so a failing edit to one of them is caught on the server, not at commit |
-| E06 ratchet floor | PASS | `docs/baseline.json`: criteria floor 45. The test floor is **0**: the generated gate does not look inside `tools/`, so it counts no tests here and that floor protects nothing |
+| E06 ratchet floor | PASS | `docs/baseline.json`: criteria floor 46. The test floor is **0**: the generated gate does not look inside `tools/`, so it counts no tests here and that floor protects nothing |
 | E07 open-questions gate | PASS | `docs/open-questions.md` is empty (no open question), so this says only that the gate would refuse one |
 | E08 criteria coverage | PASS | by mapping: each criterion points at a test file that cites its id at a test definition. This shows that a test is named, not that the test is a good test of the criterion; the 24 mappings were chosen by the person who wrote the spec, which is also the person who wrote the checker's tests |
 | E09 commits | PASS since `a101644`; **PARTIAL over the whole history** | two early assembly commits (62116f5, 57 files; 5f5dedd, 7 files) are not atomic and public history is not rewritten |

@@ -19,6 +19,7 @@ Every criterion below names the test file that checks it, and that test cites th
 - F-001.8 The README check MUST NOT run a command that changes the machine that runs it (a global install, a system package manager, a download piped into a shell), and MUST NOT run a sentence, a configuration line (key: value) or a command with a placeholder ellipsis written in a code block as if it were a command. verified by: tools/gs-check/test/unit.test.mjs
 - F-001.9 The text output of gs-check MUST say that its summary is a count of elements by status and not a grade of the project. verified by: tools/gs-check/test/readme-case.test.mjs
 - F-001.10 When the repository under test is a shallow clone and git refuses the push of the push-stage probe, the checker MUST report UNDETERMINABLE and name the shallow clone, not a red pre-push gate. verified by: tools/gs-check/test/shallow.test.mjs
+- F-001.11 The checker MUST NOT install Python packages into the Python environment of the machine that runs it: every command it starts carries PIP_REQUIRE_VIRTUALENV, and a Python project is run in a virtual environment inside the throwaway folder. verified by: tools/gs-check/test/python-isolation.test.mjs
 
 ## F-002 gs-lock notices a change to a locked spec section and gates behaviour changes
 
