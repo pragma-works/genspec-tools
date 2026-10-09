@@ -1,0 +1,9 @@
+{
+  "level": "L1",
+  "stack": "node",
+  "sentinel": "CLAUDE.md",
+  "hooks": ".githooks",
+  "gate": {
+    "test": "npm test"
+  }
+}

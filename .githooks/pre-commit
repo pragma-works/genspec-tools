@@ -1,0 +1,4 @@
+#!/bin/sh
+# >>> gs-init >>>
+if [ -f scripts/gs-gate.mjs ]; then node scripts/gs-gate.mjs pre-commit || exit 1; fi
+# <<< gs-init <<<

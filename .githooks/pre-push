@@ -1,0 +1,5 @@
+#!/bin/sh
+# >>> gs-init >>>
+GS_REFS=$(cat)
+if [ -f scripts/gs-gate.mjs ]; then node scripts/gs-gate.mjs pre-push || exit 1; fi
+# <<< gs-init <<<

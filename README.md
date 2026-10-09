@@ -90,3 +90,14 @@ CI runs everything on Linux and Windows with Node 20 and 22 (`.github/workflows/
 ## Licence
 
 MIT. See [LICENSE](LICENSE). Contributing: [CONTRIBUTING](CONTRIBUTING.md). Security: [SECURITY](SECURITY.md). History: [CHANGELOG](CHANGELOG.md).
+
+<!-- gs-init:begin (managed block; edit outside it) -->
+## Fresh clone (Generative Specification checks)
+
+```bash
+node scripts/install-hooks.mjs
+node scripts/gs-gate.mjs all
+```
+
+The first line points git at the hooks of this project; the second runs the same checks the hooks run.
+<!-- gs-init:end -->
