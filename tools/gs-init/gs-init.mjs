@@ -6,7 +6,7 @@
 // Status: design, installer tested on throwaway projects (tools/gs-init/test); not yet in a registered run. See README.md.
 //
 // Usage (in the project folder, the git top level):
-//   node gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--tools <folder>] [--no-proof] [--pubkey <file>] [--root <dir>]
+//   node gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--tools <folder>] [--no-proof] [--pubkey <file>] [--also AGENTS.md,CLAUDE.md,cursor] [--root <dir>] | --uninstall [--dry-run]
 //
 // The levels are the scale-adaptive depth (the practice notes at https://genspec.dev, the practice notes at https://genspec.dev):
 //   L0  the sentinel and three small documents (spec, decisions, open questions), and the trailer convention. Nothing runs by itself.
@@ -16,6 +16,7 @@
 // A file that already exists and that is yours (the spec, a decision record) is kept as it is. A sentinel, a README, a hook or .gs.json that
 // already exists gets a marked block added (or a key merged), after a backup, and your content stays. Running it again changes nothing.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -23,7 +24,8 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const VERSION = '0.1.0';
-const REPO_URL = 'https://github.com/jghiringhelli/genspec-tools';
+const REPO_URL = 'https://github.com/pragma-works/genspec-tools';
+const MANIFEST = '.gs-manifest.json'; // the record of what this installer wrote, so that --uninstall removes only that
 const LEVELS = ['L0', 'L1', 'L2'];
 const TOOL_FILES = {
   'gs-check': ['gs-check.mjs'],
@@ -37,7 +39,7 @@ const out = s => process.stdout.write(s + '\n');
 const die = (s, code = 2) => { process.stderr.write('gs-init: ' + s + '\n'); process.exit(code); };
 
 export function parseArgs(argv) {
-  const a = { level: 'L1', dryRun: false, sentinel: null, tools: null, proof: true, verbose: false, pubkey: null, root: process.cwd(), help: false };
+  const a = { level: 'L1', dryRun: false, sentinel: null, tools: null, proof: true, verbose: false, pubkey: null, also: [], uninstall: false, root: process.cwd(), help: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i], v = () => { if (i + 1 >= argv.length) die(`${k} needs a value`); return argv[++i]; };
     if (k === '--level') a.level = v().toUpperCase();
@@ -47,11 +49,14 @@ export function parseArgs(argv) {
     else if (k === '--no-proof') a.proof = false;
     else if (k === '--verbose') a.verbose = true;
     else if (k === '--pubkey') a.pubkey = path.resolve(v());
+    else if (k === '--also') a.also = v().split(',').map(x => x.trim()).filter(Boolean);
+    else if (k === '--uninstall') a.uninstall = true;
     else if (k === '--root') a.root = path.resolve(v());
     else if (k === '--help' || k === '-h') a.help = true;
     else die(`unknown option ${k} (try --help)`);
   }
   if (!LEVELS.includes(a.level)) die(`--level must be L0, L1 or L2 (got ${a.level})`);
+  for (const x of a.also) if (!['CLAUDE.md', 'AGENTS.md', 'cursor'].includes(x)) die('--also takes CLAUDE.md, AGENTS.md or cursor (got ' + x + ')');
   if (a.sentinel && !['CLAUDE.md', 'AGENTS.md'].includes(a.sentinel)) die('--sentinel must be CLAUDE.md or AGENTS.md');
   return a;
 }
@@ -276,6 +281,10 @@ function sentinelBlock(ctx) {
   return L.join('\n');
 }
 
+function pointerBlock(sentinel) {
+  return [MD_BEGIN, '## Generative Specification', '', 'Read `' + sentinel + '` first: it says how work is done in this project and routes to the spec, the decisions and the open questions. This file only points there.', MD_END].join('\n');
+}
+
 const SPEC_MD = (name, adr) => `# ${name}: specification
 
 The source of truth for what this project does. Edit the spec first, then the tests, then the code. Ids are never renumbered or reused.
@@ -368,8 +377,25 @@ export function insertBlock(text, begin, end, block, position) {
   return text + (text.endsWith('\n') || !text ? '' : '\n') + (text ? '\n' : '') + block + '\n';
 }
 
+// The inverse of insertBlock: takes the marked block out and leaves the rest as it was before the block was added.
+export function removeBlock(text, begin, end) {
+  const i = text.indexOf(begin), j = text.indexOf(end);
+  if (i < 0 || j < i) return text;
+  let before = text.slice(0, i), after = text.slice(j + end.length);
+  if (after.startsWith('\n')) after = after.slice(1);
+  if (!after.trim()) before = before.replace(/\n+$/, '') + (before.trim() ? '\n' : '');
+  return before + after;
+}
+const sha = buf => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16);
+const shaOf = (root, rel) => { try { return sha(fs.readFileSync(path.join(root, rel))); } catch { return null; } };
+export function loadManifest(root) {
+  try { const m = JSON.parse(unbom(read(root, MANIFEST))); if (m && m.files && m.blocks) return m; } catch { /* none or unreadable */ }
+  return { tool: 'gs-init', version: VERSION, level: null, files: {}, blocks: {}, config: [], gitConfig: {}, exclude: false };
+}
+
 class Run {
   constructor(a) {
+    this.man = loadManifest(a.root); this.touched = new Set();
     this.a = a; this.root = a.root; this.ops = []; this.stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-');
     this.backedUp = [];
   }
@@ -383,29 +409,47 @@ class Run {
     const p = path.join(this.root, rel); fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, content); if (mode) { try { fs.chmodSync(p, mode); } catch { /* ignore */ } }
   }
+  // the record of what this installer wrote: a file is claimed so that --uninstall may remove it, and only while it is still byte-for-byte what was written
+  claim(rel) { this.man.files[rel] = { sha: null }; this.touched.add(rel); }
+  claimBlock(rel, kind, begin, end, whole, text) {
+    this.man.blocks[rel] = this.man.blocks[rel] || { kind, begin, end, whole: !!whole, header: whole ? removeBlock(text, begin, end) : null };
+  }
+  // the settings keys this installer set, with what each one held before, so that --uninstall can put it back
+  recordConfig(before, after, created) {
+    if (created) this.man.cfgCreated = true;
+    const get = (o, k) => k.reduce((x, y) => (x && typeof x === 'object' ? x[y] : undefined), o);
+    for (const k of [['level'], ['stack'], ['sentinel'], ['hooks'], ['gate', 'test'], ['attribution', 'enabled'], ['decide', 'requireSigned']]) {
+      const was = get(before, k), now = get(after, k);
+      if (JSON.stringify(was) === JSON.stringify(now)) continue;
+      const old = this.man.config.find(c => c.path.join('.') === k.join('.'));
+      if (old) old.value = now; else this.man.config.push(was === undefined ? { path: k, value: now } : { path: k, value: now, prev: was });
+    }
+  }
   // kind 'keep': the file is the person's; create it when absent, never change it.
   putKeep(rel, content) {
-    if (!exists(this.root, rel)) { if (!this.a.dryRun) this.write(rel, content); return this.note('create', rel); }
+    if (!exists(this.root, rel)) { if (!this.a.dryRun) { this.write(rel, content); this.claim(rel); } return this.note('create', rel); }
     this.note('keep', rel, 'already exists; left as it is');
   }
   // kind 'own': a file generated by gs-init; replaced (after a backup) when it differs.
   putOwn(rel, content, mode = null) {
-    if (!exists(this.root, rel)) { if (!this.a.dryRun) this.write(rel, content, mode); return this.note('create', rel); }
+    if (!exists(this.root, rel)) { if (!this.a.dryRun) { this.write(rel, content, mode); this.claim(rel); } return this.note('create', rel); }
+    if (!this.a.dryRun && read(this.root, rel).replace(/\r\n/g, '\n') === content) this.claim(rel);
     if (read(this.root, rel).replace(/\r\n/g, '\n') === content) { if (!this.a.dryRun && mode) try { fs.chmodSync(path.join(this.root, rel), mode); } catch { /* ignore */ } return this.note('same', rel); }
     const b = this.a.dryRun ? '.gs-init-backup/<stamp>/' + rel : this.backup(rel);
-    if (!this.a.dryRun) this.write(rel, content, mode);
+    if (!this.a.dryRun) { this.write(rel, content, mode); this.claim(rel); }
     this.note('update', rel, 'backup ' + b);
   }
   // A marked block inside a file that may be the person's. position: 'end' | 'afterShebang'.
   putBlock(rel, begin, end, block, { position = 'end', create = '' } = {}) {
     const p = path.join(this.root, rel);
-    if (!fs.existsSync(p)) { if (!this.a.dryRun) this.write(rel, create + block + '\n'); return this.note('create', rel); }
+    const kind = begin === SH_BEGIN ? 'sh' : 'md';
+    if (!fs.existsSync(p)) { if (!this.a.dryRun) { this.write(rel, create + block + '\n'); this.claimBlock(rel, kind, begin, end, true, create + block + '\n'); } return this.note('create', rel); }
     const raw = read(this.root, rel), eol = raw.includes('\r\n') ? '\r\n' : '\n', text = raw.replace(/\r\n/g, '\n');
     const next = insertBlock(text, begin, end, block, position);
-    if (next === text) return this.note('same', rel);
+    if (next === text) { if (!this.a.dryRun) this.claimBlock(rel, kind, begin, end, false); return this.note('same', rel); }
     const hadBlock = text.indexOf(begin) >= 0 && text.indexOf(end) > text.indexOf(begin);
     const b = this.a.dryRun ? '.gs-init-backup/<stamp>/' + rel : this.backup(rel);
-    if (!this.a.dryRun) fs.writeFileSync(p, eol === '\r\n' ? next.replace(/\n/g, '\r\n') : next);
+    if (!this.a.dryRun) { fs.writeFileSync(p, eol === '\r\n' ? next.replace(/\n/g, '\r\n') : next); this.claimBlock(rel, kind, begin, end, false); }
     this.note(hadBlock ? 'update' : 'append', rel, 'backup ' + b + (hadBlock ? '; only the managed block changed' : '; your content is untouched'));
   }
 }
@@ -415,7 +459,7 @@ function findTools(a) {
   const res = {};
   for (const [tool, files] of Object.entries(TOOL_FILES)) {
     res[tool] = null;
-    for (const r of roots) { const d = path.join(r, tool); if (files.every(f => fs.existsSync(path.join(d, f)))) { res[tool] = { dir: d, files, licence: [path.join(r, 'LICENSE')].find(fs.existsSync) || null }; break; } }
+    for (const r of roots) { const d = path.join(r, tool); if (files.every(f => fs.existsSync(path.join(d, f)))) { res[tool] = { dir: d, files, licence: [path.join(r, 'LICENSE'), path.join(r, '..', 'LICENSE')].find(fs.existsSync) || null }; break; } }
   }
   return res;
 }
@@ -465,6 +509,13 @@ export function install(a) {
   const decideAvail = level === 'L2';
   R.putBlock(sentinel, MD_BEGIN, MD_END, sentinelBlock({ level, hasGate, hasDecide: decideAvail, testCmd, adr }), { create: `# ${name}: sentinel\n\n` });
 
+  for (const x of a.also) {
+    if (x === sentinel) continue;
+    const point = pointerBlock(sentinel);
+    if (x === 'cursor') R.putBlock('.cursor/rules/gs.mdc', MD_BEGIN, MD_END, point, { create: '---\ndescription: Read the project sentinel first\nalwaysApply: true\n---\n\n' });
+    else R.putBlock(x, MD_BEGIN, MD_END, point, { create: `# ${name}: ${x}\n\n` });
+  }
+
   // 3. settings
   const cfgPath = '.gs.json';
   let cfg = {}, cfgOk = true;
@@ -472,12 +523,13 @@ export function install(a) {
   const hk = hookDirOf(root);
   if (!cfgOk) R.note('keep', cfgPath, 'exists but is not valid JSON; left as it is, set "level" by hand');
   else {
-    const before = JSON.stringify(cfg);
+    const before = JSON.stringify(cfg), orig = JSON.parse(before);
     cfg.level = level; cfg.stack = st.stack; cfg.sentinel = sentinel;
     if (hasGate) { cfg.hooks = cfg.hooks || hk.dir; if (testCmd) { cfg.gate = cfg.gate || {}; if (!cfg.gate.test) cfg.gate.test = testCmd; } }
     if (level === 'L2') { cfg.attribution = cfg.attribution || {}; if (cfg.attribution.enabled === undefined) cfg.attribution.enabled = true; }
     if (a.pubkey) { cfg.decide = cfg.decide || {}; cfg.decide.requireSigned = true; }
     const body = JSON.stringify(cfg, null, 2) + '\n';
+    if (!a.dryRun) R.recordConfig(orig, cfg, !exists(root, cfgPath));
     if (!exists(root, cfgPath)) { if (!a.dryRun) R.write(cfgPath, body); R.note('create', cfgPath); }
     else if (JSON.stringify(cfg) === before) R.note('same', cfgPath);
     else { const b = a.dryRun ? '.gs-init-backup/<stamp>/' + cfgPath : R.backup(cfgPath); if (!a.dryRun) R.write(cfgPath, body); R.note('update', cfgPath, 'backup ' + b + '; your other keys are kept'); }
@@ -488,6 +540,7 @@ export function install(a) {
   const missing = []; let licence = null;
   for (const t of wantTools) {
     const src = tools[t];
+    if (src && path.resolve(src.dir) === path.resolve(root, 'tools', t)) { R.note('same', `tools/${t}/`, 'this folder is the source of the tools'); continue; }
     if (!src) { if (!TOOL_FILES[t].every(f => exists(root, `tools/${t}/${f}`))) missing.push(t); else R.note('same', `tools/${t}/`, 'already present'); continue; }
     for (const f of src.files) R.putOwn(`tools/${t}/${f}`, fs.readFileSync(path.join(src.dir, f), 'utf8').replace(/\r\n/g, '\n'), 0o755);
     if (src.licence) licence = src.licence;
@@ -513,11 +566,13 @@ export function install(a) {
         hookNotes.push(`your existing ${hname} hook was copied into ${rel} and still runs after the checks`);
         const first = adopt.split('\n')[0];
         if (first.startsWith('#!') && !/\b(sh|bash|zsh|dash|ksh)\b/.test(first)) { // not a shell script: keep it as a file of its own and call it
-          const prev = `${dir}/${hname}.gs-prev`; if (!a.dryRun) R.write(prev, adopt, 0o755); R.note('create', prev, 'your hook, unchanged');
-          if (!a.dryRun) R.write(rel, '#!/bin/sh\n' + block + `\nexec "$(dirname "$0")/${hname}.gs-prev" "$@"\n`, 0o755);
+          const prev = `${dir}/${hname}.gs-prev`;
+          if (!a.dryRun) { R.write(prev, adopt, 0o755); R.claim(prev); } R.note('create', prev, 'your hook, unchanged');
+          const wrapped = '#!/bin/sh\n' + block + `\nexec "$(dirname "$0")/${hname}.gs-prev" "$@"\n`;
+          if (!a.dryRun) { R.write(rel, wrapped, 0o755); R.claimBlock(rel, 'sh', SH_BEGIN, SH_END, true, wrapped); }
           R.note('create', rel, 'calls your ' + hname + ' hook');
         } else {
-          if (!a.dryRun) R.write(rel, insertBlock(adopt, SH_BEGIN, SH_END, block, 'afterShebang'), 0o755);
+          if (!a.dryRun) { const merged = insertBlock(adopt, SH_BEGIN, SH_END, block, 'afterShebang'); R.write(rel, merged, 0o755); R.claimBlock(rel, 'sh', SH_BEGIN, SH_END, true, merged); }
           R.note('create', rel, 'your .git/hooks/' + hname + ' carried over, checks added above it');
         }
         continue;
@@ -526,7 +581,7 @@ export function install(a) {
         const cur = read(root, rel), first = cur.split('\n')[0];
         if (first.startsWith('#!') && !/\b(sh|bash|zsh|dash|ksh)\b/.test(first) && !cur.includes(SH_BEGIN)) {
           const prev = `${rel}.gs-prev`, b = a.dryRun ? '.gs-init-backup/<stamp>/' + rel : R.backup(rel);
-          if (!a.dryRun) { R.write(prev, cur, 0o755); R.write(rel, '#!/bin/sh\n' + block + `\nexec "$(dirname "$0")/${hname}.gs-prev" "$@"\n`, 0o755); }
+          if (!a.dryRun) { const wrapped = '#!/bin/sh\n' + block + `\nexec "$(dirname "$0")/${hname}.gs-prev" "$@"\n`; R.write(prev, cur, 0o755); R.write(rel, wrapped, 0o755); R.claimBlock(rel, 'sh', SH_BEGIN, SH_END, true, wrapped); R.man.blocks[rel].restoreFrom = prev; }
           R.note('update', rel, 'backup ' + b + '; your hook (not a shell script) is kept as ' + posix(path.basename(prev)) + ' and still runs');
           hookNotes.push(`your ${hname} hook is not a shell script: kept as ${prev} and called after the checks`);
           continue;
@@ -539,7 +594,7 @@ export function install(a) {
     // activate
     if (!a.dryRun) {
       if (hk.preset) R.note('same', 'core.hooksPath', 'already ' + hk.dir + '; kept');
-      else { const r = git(root, ['config', 'core.hooksPath', dir]); R.note(r.status === 0 ? 'config' : 'keep', 'core.hooksPath', r.status === 0 ? 'set to ' + dir : 'could not be set'); }
+      else { const r = git(root, ['config', 'core.hooksPath', dir]); if (r.status === 0) R.man.gitConfig.hooksPath = dir; R.note(r.status === 0 ? 'config' : 'keep', 'core.hooksPath', r.status === 0 ? 'set to ' + dir : 'could not be set'); }
     } else R.note('config', 'core.hooksPath', hk.preset ? 'already ' + hk.dir : 'would be set to ' + dir);
   }
 
@@ -570,10 +625,79 @@ export function install(a) {
   if (hasGate) {
     if (exists(root, 'docs/baseline.json')) R.note('keep', 'docs/baseline.json', 'already exists; floors unchanged');
     else if (a.dryRun) R.note('create', 'docs/baseline.json', 'floors measured now (tests found, criteria in the spec)');
-    else { const r = spawnSync(process.execPath, ['scripts/gs-gate.mjs', 'ratchet', '--init'], { cwd: root, encoding: 'utf8' }); R.note(r.status === 0 ? 'create' : 'keep', 'docs/baseline.json', r.status === 0 ? 'floors measured now' : 'could not be created: ' + (r.stderr || r.stdout).trim()); }
+    else { const r = spawnSync(process.execPath, ['scripts/gs-gate.mjs', 'ratchet', '--init'], { cwd: root, encoding: 'utf8' }); if (r.status === 0) R.claim('docs/baseline.json'); R.note(r.status === 0 ? 'create' : 'keep', 'docs/baseline.json', r.status === 0 ? 'floors measured now' : 'could not be created: ' + (r.stderr || r.stdout).trim()); }
   }
 
+  if (!a.dryRun) {
+    for (const rel of R.touched) if (R.man.files[rel]) R.man.files[rel].sha = shaOf(root, rel);
+    R.man.version = VERSION; R.man.level = level;
+    const body = JSON.stringify(R.man, null, 2) + '\n';
+    if (!exists(root, MANIFEST) || read(root, MANIFEST) !== body) R.write(MANIFEST, body);
+  }
   return { R, st, tools, missing, hookNotes, testCmd, sentinel, level, hasGate, isRepo };
+}
+
+// ---------------------------------------------------------------- uninstall: only what the record says this installer wrote
+const norm = t => (t || '').replace(/\r\n/g, '\n').trim();
+export function uninstall(a) {
+  const root = a.root;
+  if (!exists(root, MANIFEST)) return { none: true, acts: [] };
+  const man = loadManifest(root), acts = [], dry = a.dryRun;
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+/, '').replace('T', '-') + '-uninstall';
+  const act = (kind, rel, extra = '') => acts.push({ kind, rel, extra });
+  const backup = rel => { const dest = path.join(root, '.gs-init-backup', stamp, rel); fs.mkdirSync(path.dirname(dest), { recursive: true }); fs.copyFileSync(path.join(root, rel), dest); };
+  const prune = rel => { // remove the folders this left empty, up to the project root
+    let d = path.dirname(path.join(root, rel));
+    while (d.length > root.length) { try { if (fs.readdirSync(d).length) break; fs.rmdirSync(d); } catch { break; } d = path.dirname(d); }
+  };
+  const done = new Set();
+  // 1. marked blocks: take the block out; delete the file only if it holds nothing but what this installer put there
+  for (const [rel, b] of Object.entries(man.blocks)) {
+    const p = path.join(root, rel);
+    if (!fs.existsSync(p)) { act('gone', rel); continue; }
+    const raw = fs.readFileSync(p, 'utf8'), eol = raw.includes('\r\n') ? '\r\n' : '\n', text = raw.replace(/\r\n/g, '\n');
+    if (!text.includes(b.begin)) { act('gone', rel, 'the block is not there any more'); continue; }
+    const rest = removeBlock(text, b.begin, b.end);
+    if (b.whole && norm(rest) === norm(b.header)) {
+      const prev = b.restoreFrom && fs.existsSync(path.join(root, b.restoreFrom)) ? b.restoreFrom : null;
+      if (prev) { if (!dry) { fs.copyFileSync(path.join(root, prev), p); fs.rmSync(path.join(root, prev)); } done.add(prev); act('restore', rel, 'your own hook is back in place'); }
+      else { if (!dry) { fs.rmSync(p); prune(rel); } act('remove', rel); }
+    } else {
+      if (!dry) { backup(rel); fs.writeFileSync(p, eol === '\r\n' ? rest.replace(/\n/g, '\r\n') : rest); }
+      act('block', rel, 'only the gs block was taken out; your text stays');
+    }
+  }
+  // 2. files: removed only while they are still exactly what was written
+  for (const [rel, f] of Object.entries(man.files)) {
+    if (done.has(rel)) continue;
+    const p = path.join(root, rel);
+    if (!fs.existsSync(p)) { act('gone', rel); continue; }
+    if (f.sha && shaOf(root, rel) === f.sha) { if (!dry) { fs.rmSync(p); prune(rel); } act('remove', rel); }
+    else act('keep', rel, 'you changed it since it was written, so it stays');
+  }
+  // 3. settings keys
+  if (exists(root, '.gs.json') && man.config.length) {
+    let cfg = null; try { cfg = JSON.parse(unbom(read(root, '.gs.json'))); } catch { /* unreadable */ }
+    if (cfg) {
+      for (const c of [...man.config].reverse()) {
+        let o = cfg; for (const k of c.path.slice(0, -1)) o = o && typeof o[k] === 'object' ? o[k] : null;
+        const last = c.path[c.path.length - 1];
+        if (!o || JSON.stringify(o[last]) !== JSON.stringify(c.value)) continue; // changed by you since: left alone
+        if (c.prev === undefined) delete o[last]; else o[last] = c.prev;
+      }
+      for (const k of ['gate', 'attribution', 'decide']) if (cfg[k] && typeof cfg[k] === 'object' && !Object.keys(cfg[k]).length) delete cfg[k];
+      if (man.cfgCreated && !Object.keys(cfg).length) { if (!dry) fs.rmSync(path.join(root, '.gs.json')); act('remove', '.gs.json'); }
+      else { if (!dry) { backup('.gs.json'); fs.writeFileSync(path.join(root, '.gs.json'), JSON.stringify(cfg, null, 2) + '\n'); } act('block', '.gs.json', 'only the keys gs-init set were taken out'); }
+    }
+  }
+  // 4. the git setting
+  if (man.gitConfig && man.gitConfig.hooksPath && git(root, ['config', '--get', 'core.hooksPath']).stdout.trim() === man.gitConfig.hooksPath) {
+    if (!dry) git(root, ['config', '--unset', 'core.hooksPath']);
+    act('config', 'core.hooksPath', 'unset; git uses its own hooks folder again');
+  }
+  if (!dry) { fs.rmSync(path.join(root, MANIFEST)); }
+  act('remove', MANIFEST);
+  return { none: false, acts, stamp };
 }
 
 // ---------------------------------------------------------------- the proof: gs-check strict on a COPY (it reads only committed state)
@@ -626,6 +750,17 @@ function plain(level, res, p) {
 export async function main(argv) {
   const a = parseArgs(argv);
   if (a.help) { out(fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').filter(l => l.startsWith('//')).slice(4, 17).map(l => l.slice(3)).join('\n')); return 0; }
+  if (a.uninstall) {
+    const u = uninstall(a);
+    if (u.none) { out('gs-init: nothing to remove: there is no ' + MANIFEST + ' here, so there is no record of what was installed.\n  If this project was set up before the record existed, run gs-init once more (it changes nothing that is already right) and then uninstall.'); return 1; }
+    out(`gs-init ${VERSION}: uninstall${a.dryRun ? '  [dry run: nothing was changed]' : ''}`);
+    for (const o of u.acts) out(`  ${o.kind.padEnd(7)} ${o.rel}${o.extra ? '   (' + o.extra + ')' : ''}`);
+    out('');
+    out('You got: the gs files are gone; your own files, your code and your git history were not touched.');
+    out('Do next: git status shows what changed.' + (fs.existsSync(path.join(a.root, '.gs-init-backup', u.stamp)) ? ' The backups of the files that were edited are in .gs-init-backup/' + u.stamp + '/ (delete that folder when you are happy).' : ''));
+    out('Not removed: the .git folder (if gs-init made it), the backups, and any file you changed after it was written.');
+    return 0;
+  }
   const res = install(a);
   out(`gs-init ${VERSION}: level ${a.level}, stack ${res.st.stack}${res.st.also.length ? ' (also ' + res.st.also.join(', ') + ')' : ''}, sentinel ${res.sentinel}${a.dryRun ? '  [dry run: nothing was written]' : ''}`);
   for (const o of res.R.ops) out(`  ${(LABEL[o.kind] || o.kind).padEnd(6)} ${o.rel}${o.extra ? '   (' + o.extra + ')' : ''}`);

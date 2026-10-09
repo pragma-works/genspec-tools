@@ -210,11 +210,11 @@ test('G10 missing tools: said honestly with where to fetch; L2 without gs-decide
   const run = (...a) => spawnSync(process.execPath, [path.join(alone, 'gs-init.mjs'), '--no-proof', ...a], { cwd: dir, encoding: 'utf8', env: { ...process.env, GS_TOOLS: '' } });
   const r2 = run('--level', 'L2');
   assert.equal(r2.status, 2);
-  assert.match(r2.stderr, /needs gs-decide/); assert.match(r2.stderr, /github\.com\/jghiringhelli\/genspec-tools/);
+  assert.match(r2.stderr, /needs gs-decide/); assert.match(r2.stderr, /github\.com\/pragma-works\/genspec-tools/);
   assert.equal(has(dir, 'CLAUDE.md'), false, 'nothing is written when it refuses');
   const r1 = run('--level', 'L1');
   assert.equal(r1.status, 0, r1.stderr);
-  assert.match(r1.stdout, /missing tool gs-check/); assert.match(r1.stdout, /Fetch tools\/gs-check from https:\/\/github\.com\/jghiringhelli\/genspec-tools/);
+  assert.match(r1.stdout, /missing tool gs-check/); assert.match(r1.stdout, /Fetch tools\/gs-check from https:\/\/github\.com\/pragma-works\/genspec-tools/);
   assert.ok(has(dir, 'scripts/gs-gate.mjs'), 'the gate is generated and needs no tool');
   assert.equal(has(dir, 'tools'), false);
 });

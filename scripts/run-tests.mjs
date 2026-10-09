@@ -17,8 +17,7 @@ const HEAVY = /decide.test|signed.test|snapshot.test|init.test/;
 const SLOW = /smoke-cli.test|controls\.test|migration\.test|sync\.test/;
 
 const suites = [];
-for (const tool of readdirSync(join(ROOT, 'tools')).sort()) {
-  const dir = join(ROOT, 'tools', tool, 'test');
+for (const dir of [...readdirSync(join(ROOT, 'tools')).sort().map(tool => join(ROOT, 'tools', tool, 'test')), join(ROOT, 'bin', 'test')]) {
   if (!existsSync(dir)) continue;
   for (const f of readdirSync(dir).sort()) if (f.endsWith('.test.mjs')) suites.push(join(dir, f));
 }

@@ -4,10 +4,18 @@
   "private": true,
   "description": "Checks that a software project has what it needs to be trusted, written for AI-assisted work. Node only, no dependencies.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pragma-works/genspec-tools.git"
+  },
+  "bin": {
+    "gs": "bin/gs.mjs"
+  },
   "engines": {
     "node": ">=18"
   },
   "scripts": {
+    "gs": "node bin/gs.mjs",
     "demo": "node tools/gs-demo/gs-demo.mjs",
     "test": "node scripts/run-tests.mjs --fast",
     "test:quick": "node scripts/run-tests.mjs --quick",

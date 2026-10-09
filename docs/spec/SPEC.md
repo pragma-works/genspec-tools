@@ -63,6 +63,23 @@ Every criterion below names the test file that checks it, and that test cites th
 - F-006.2 The output MUST NOT say "governed" or give a grade, and MUST end with the quick-look line. verified by: tools/gs-demo/test/demo.test.mjs
 - F-006.3 A very large folder MUST be refused with a message and nothing copied. verified by: tools/gs-demo/test/demo.test.mjs
 
+## F-007 gs is one front door to the tools, and takes out only what it put in
+
+`bin/gs.mjs` picks the tool, asks at most two questions, and says in plain words what it got and what to do next. `gs-init` records what it wrote in `.gs-manifest.json`, and `gs uninstall` removes only that.
+
+### Acceptance criteria
+
+- F-007.1 An unknown command or an unknown assistant name MUST be refused with exit 2 and nothing written, and the help MUST name every command. verified by: bin/test/gs.test.mjs
+- F-007.2 With no command in a project folder, and with `demo`, gs MUST run the quick look and leave the folder byte for byte as it was. verified by: bin/test/gs.test.mjs
+- F-007.3 `init` with flags MUST ask nothing and write the assistant files asked for; in a terminal it MUST ask the level and the assistants and map the answers; it MUST refuse a home folder or a drive root. verified by: bin/test/gs.test.mjs
+- F-007.4 `init` MUST record every file and block it wrote in `.gs-manifest.json`, and a second run MUST leave the record and the folder byte-identical and make no backup. verified by: bin/test/gs.test.mjs
+- F-007.5 `uninstall` MUST remove what the record says, leave every file of the person's byte for byte (a file changed after it was written is kept), restore the person's own git hook, unset the hooks setting it set, and remove only the folders it emptied. verified by: bin/test/gs.test.mjs
+- F-007.6 `uninstall --dry-run` MUST change nothing, and `uninstall` MUST refuse when there is no record, or when it cannot ask and was not given `--yes`. verified by: bin/test/gs.test.mjs
+- F-007.7 `update` MUST re-run the setup from a given or fetched copy of the tools, back up each file it replaces, leave the person's files alone, and a second update MUST change nothing. verified by: bin/test/gs.test.mjs
+- F-007.8 `doctor` MUST list what is installed and what is missing, flag tool copies that differ from this gs, and say that it does not test that anything works. verified by: bin/test/gs.test.mjs
+- F-007.9 `start` MUST explain itself before acting, take the quick look, and then set up level L0 only. verified by: bin/test/gs.test.mjs
+- F-007.10 The other tools (`lock`, `decide`, `snapshot`, `check`) MUST be reachable through gs with their own options. verified by: bin/test/gs.test.mjs
+
 ### Decisions
 
 Why it is built this way: docs/decisions/0001-adopt-generative-specification.md.
