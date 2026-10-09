@@ -1252,6 +1252,19 @@ const KIND = [
   ['test', /(npm (run )?test\b|npm t\b|node --run test|pytest|go test|cargo test|node --test|vitest|jest|make test|yarn test|pnpm test|npm run (check|verify|validate|ci|all)\b|make (check|verify|ci|all)\b|python3? \S*(check|verify|validate)\S*\.py)/], // (dev loop, defect C4) the "one command that runs every check" counts as the test command
   ['build', /^(npm run build|make( build)?$|go build|cargo build|tsc\b)/]
 ];
+// A sentence, not a command: five or more words, starts with a capital letter that is not a PowerShell verb, and has no shell syntax in it.
+function looksLikeProse(cmd) {
+  const words = cmd.trim().split(/\s+/);
+  if (words.length < 5 || /^(Get|Set|New|Remove|Invoke|Import|Install|Start|Stop)-/.test(words[0])) return false;
+  if (/[|&;<>$=]|\s--?\w/.test(cmd)) return false;
+  return /^[A-Z]/.test(words[0]) || /[.!?]$/.test(cmd);
+}
+// Global or system-wide changes, and a download piped into a shell. Skipped, because running them would change the machine that runs the checker.
+function changesTheMachine(cmd) {
+  return /(^|[\s;&|])(sudo|brew|apt|apt-get|yum|dnf|choco|winget|scoop)\s/.test(cmd)
+    || /\b(npm|yarn|pnpm|bun)\b.*\s(-g|--global)\b/.test(cmd) || /\b(yarn global|pip3? install --user|cargo install|go install|gem install|dotnet tool install)\b/.test(cmd)
+    || /(curl|wget|iwr|irm|Invoke-WebRequest)\b.*\|\s*(sudo\s+)?(ba|z)?sh\b/.test(cmd) || /\|\s*iex\b/i.test(cmd);
+}
 function parseReadme(ctx) {
   const root = ctx.root; const rp = ['README.md', 'readme.md', 'README.rst', 'README'].find(x => exists(path.join(root, x)));
   if (!rp) return null;
@@ -1285,6 +1298,10 @@ function parseReadme(ctx) {
       }
       const prefix = pre.length ? pre.join(' && ') + ' && ' : '';
       if (/<[^>]+>|YOUR_|your-|\[[^\]]*\]$/.test(cmd)) { cmds.push({ cmd, kind: 'skipped', why: 'placeholder', pre: prefix }); continue; }
+      // (scan of 60 repositories, 2026-10-09) a prompt for an assistant pasted in a code block is prose, not a command (it came back as "exit 127");
+      // a command that changes the machine (global install, system package manager, a pipe into a shell) is not run: this checker must not change the host
+      if (looksLikeProse(cmd)) { cmds.push({ cmd, kind: 'skipped', why: 'prose in a code block', pre: prefix }); continue; }
+      if (changesTheMachine(cmd)) { cmds.push({ cmd, kind: 'skipped', why: 'changes the machine, not the project', pre: prefix }); continue; }
       if (/^git clone\b/.test(cmd)) { cmds.push({ cmd, kind: 'skipped', why: 'clone', pre: prefix }); continue; }
       if (/(exit(s|ed)?( with)?( code)?\s*[1-9]|\bfails?\b|\berror\b|non-zero)/i.test(comment)) { cmds.push({ cmd, kind: 'skipped', why: 'documented failure', pre: prefix }); continue; }
       const kind = (KIND.find(([, re]) => re.test(cmd)) || ['run'])[0];
@@ -1332,7 +1349,7 @@ function e12(ctx) {
 // E12 runs last: it smoke-starts long-running commands and must not leave state for the probes.
 const ORDER = [['E01', e01], ['E02', e02], ['E03', e03], ['E04', e04], ['E05', e05], ['E06', e06], ['E07', e07], ['E08', e08], ['E09', e09], ['E10', e10], ['E11', e11], ['E12', e12]];
 function prepare(ctx) { ctx.shared.readme = parseReadme(ctx); }
-module.exports = { ORDER, prepare, discover, parseSpecDefs, countTests, citedByATest, installCommands, detectStack, testCommand };
+module.exports = { ORDER, prepare, discover, parseSpecDefs, countTests, citedByATest, installCommands, detectStack, testCommand, parseReadme, looksLikeProse, changesTheMachine };
 
 };
 

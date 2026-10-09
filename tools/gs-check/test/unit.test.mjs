@@ -81,6 +81,26 @@ test('C1 refsIn: bare paths in a routing-table file cell and in prose count; red
   assert.ok(!refs.includes('scripts/planted.test.js'));
 });
 
+// F-001.8
+test('README steps: prose in a code block and commands that change the machine are skipped, real steps are kept', () => {
+  const it = internals.items;
+  assert.strictEqual(it.looksLikeProse('Read the spec in docs/specs/, set up this project with ForgeCraft,'), true);
+  assert.strictEqual(it.looksLikeProse('scaffold it with the right tags, recommend the tech stack, start building.'), true);
+  for (const real of ['npm install', 'npm run build -- --watch now please', 'pip install -e ".[dev]"', 'Get-ChildItem -Recurse -Force', 'python -m pytest tests -q']) assert.strictEqual(it.looksLikeProse(real), false, real);
+  for (const bad of ['npm install -g codeseeker', 'sudo apt-get install -y git', 'brew install node', 'curl -fsSL https://x.y/install.sh | sh', 'pnpm add --global foo', 'cargo install ripgrep']) assert.strictEqual(it.changesTheMachine(bad), true, bad);
+  for (const ok of ['npm install', 'npm ci', 'pip install -r requirements.txt', 'npx vitest run', 'make test']) assert.strictEqual(it.changesTheMachine(ok), false, ok);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gscheck-readme-'));
+  fs.writeFileSync(path.join(dir, 'README.md'), '# P\n\n## Quick start\n\n```sh\nnpm install -g thing\nnpm install\nnpm test\n```\n\n### Quick start with an assistant\n\n```\nRead the spec in docs/specs/ and then build the first feature for me.\n```\n');
+  try {
+    const r = it.parseReadme({ root: dir, cfg });
+    const kinds = Object.fromEntries(r.commands.map(c => [c.cmd, c.kind]));
+    assert.strictEqual(kinds['npm install -g thing'], 'skipped');
+    assert.strictEqual(kinds['npm install'], 'install');
+    assert.strictEqual(kinds['npm test'], 'test');
+    assert.strictEqual(r.commands.find(c => /^Read the spec/.test(c.cmd)).kind, 'skipped');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 // F-001.6
 test('refsIn: a template path with a bracket placeholder is not a route, and a bare word such as `test` is a hint that is not reported when missing', () => {
   const t = 'Diagrams go in `docs/diagrams/flow-[usecase].md`. Run `test` and look in `scripts` and `docs/real.md`.';
