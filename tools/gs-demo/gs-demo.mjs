@@ -230,6 +230,8 @@ function e04(c) {
   return found('architecture, data model and conventions exist and are routed from the sentinel');
 }
 
+// Files under test fixtures are samples for the tests of a tool, not the project's own gates or floors (seen when the quick look was run on this repository).
+const FIXTURE_DIR = /(^|\/)(fixtures?|__fixtures__|testdata|examples?|samples?)\//i;
 // Gates: hooks, their wiring, the CI file, and package scripts. Read, not run.
 function gateFacts(c) {
   const hookFiles = c.files.filter(f => /^(\.githooks|\.husky|githooks|hooks)\/[^/]+$/.test(f) && !/\.sample$/.test(f) && !/^\.husky\/(_|\.gitignore)/.test(f));
@@ -253,7 +255,7 @@ function gateFacts(c) {
   const ci = ciFiles.filter(f => { const t = c.text(f) || ''; return TESTCMD.test(t) && !/continue-on-error:\s*true/.test(t); });
   const testScript = scripts.test && !/no test specified|^\s*(echo|exit 0|true)\b/.test(scripts.test) ? scripts.test : null;
   const tests = c.files.filter(f => TEST_FILE.test(f) && !/(^|\/)(fixtures?|node_modules)\//.test(f));
-  return { hooks, blocking, wired, ci, ciFiles, scripts, testScript, tests, pkg, allGateText: [...hooks.map(h => h.text), ...c.files.filter(f => /(^|\/)(gate|check|verify)[^/]*\.(js|mjs|cjs|py|sh)$/i.test(f) || /^scripts\/.+/.test(f)).map(f => c.text(f) || ''), ...ciFiles.map(f => c.text(f) || ''), ...Object.values(scripts)].join('\n') };
+  return { hooks, blocking, wired, ci, ciFiles, scripts, testScript, tests, pkg, allGateText: [...hooks.map(h => h.text), ...c.files.filter(f => !FIXTURE_DIR.test(f) && (/(^|\/)(gate|check|verify)[^/]*\.(js|mjs|cjs|py|sh)$/i.test(f) || /^scripts\/.+/.test(f))).map(f => c.text(f) || ''), ...ciFiles.map(f => c.text(f) || ''), ...Object.values(scripts)].join('\n') };
 }
 function e05(c, G) {
   if (!G.tests.length) return missing('no test files found');
@@ -266,7 +268,7 @@ function e05(c, G) {
   return weak('tests exist but no gate runs them');
 }
 function e06(c, G) {
-  const f = c.files.find(x => /(^|\/)(ratchet|baseline|floors?)[^/]*\.(json|ya?ml|txt)$/i.test(x) && !/(^|\/)node_modules\//.test(x));
+  const f = c.files.find(x => /(^|\/)(ratchet|baseline|floors?)[^/]*\.(json|ya?ml|txt)$/i.test(x) && !/(^|\/)node_modules\//.test(x) && !FIXTURE_DIR.test(x));
   if (!f) return missing('no ratchet or floor file');
   const t = c.text(f) || ''; const nums = [...t.matchAll(/:\s*(-?\d+(?:\.\d+)?)/g)].map(m => Number(m[1]));
   if (!nums.length) return weak(`${f} holds no numbers`);

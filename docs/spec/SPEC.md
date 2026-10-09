@@ -71,6 +71,7 @@ Every criterion below names the test file that checks it, and that test cites th
 - F-006.6 A CI step that runs the tests through make ci, tox, nox, just, bun, vitest or jest MUST count as a gate that runs them; a CI file that runs no test command MUST NOT; when the tests are run only by CI, the note MUST say that gs-check --strict credits only a hook. verified by: tools/gs-demo/test/demo.test.mjs
 - F-006.7 When fewer than 5 percent of the files are source code (or none), the output MUST say, in a note before the elements, that the checks are written for software projects and that a documents, content or game-assets project needs a different profile; the list of found elements MUST NOT be phrased as a tally out of twelve; a skipped commit check MUST say why. verified by: tools/gs-demo/test/demo.test.mjs
 - F-006.8 A spec MUST NOT be reported as found with fewer than 3 numbered ids, a decision-record id (ADR-...) MUST NOT count as a requirement or criterion, and when a spec has ids but no criteria heading, the ids MUST be matched against the tests by their plain name. verified by: tools/gs-demo/test/demo.test.mjs
+- F-006.9 A floor file or a gate script inside a fixtures, samples or examples folder MUST NOT be credited as the project's own ratchet or gate. verified by: tools/gs-demo/test/demo.test.mjs
 
 ## F-007 gs is one front door to the tools, and takes out only what it put in
 

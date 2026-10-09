@@ -230,6 +230,17 @@ test('D20 E02/E08: ids listed under any heading are checked against the tests; a
   const dir3 = withFiles({ 'docs/spec/SPEC.md': '# Spec\n\n- REQ-001 only one\n' });
   try { const n = lookAt(dir3).results.E02; assert.strictEqual(n.status, 'weak'); assert.match(n.note, /only 1 numbered id/); } finally { cleanup(dir3); }
 });
+// F-006.9
+test('D21 E06 and E11: a floor file or a gate script that lives in a fixtures folder is a sample for a test, not the project\'s own', () => {
+  const dir = withFiles({
+    'tests/fixtures/good/docs/ratchet.json': '{"floors":{"tests":5},"ceilings":{}}\n',
+    'tests/fixtures/good/scripts/check-cochange.mjs': '// gs-cochange commit-msg docs/ spec id\n',
+    'src/a.js': 'x\n'
+  });
+  try { const look = lookAt(dir); assert.strictEqual(status(look, 'E06'), 'missing', JSON.stringify(look.results.E06)); assert.strictEqual(status(look, 'E11'), 'missing', JSON.stringify(look.results.E11)); } finally { cleanup(dir); }
+  const real = withFiles({ 'docs/ratchet.json': '{"floors":{"tests":5},"ceilings":{}}\n', 'scripts/gate.mjs': "// ratchet.json\n", 'src/a.js': 'x\n' });
+  try { assert.notStrictEqual(status(lookAt(real), 'E06'), 'missing'); } finally { cleanup(real); }
+});
 // F-006.7
 test('D18 a folder that is mostly documents gets a note that the checks are for code projects; a code project does not', () => {
   const docs = {}; for (let i = 0; i < 12; i++) docs[`notes/n${i}.md`] = `# Note ${i}\n\ntext\n`;
