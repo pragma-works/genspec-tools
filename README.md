@@ -19,15 +19,17 @@ The checks look for twelve things a team can write down and enforce (a spec with
 ```
 git clone https://github.com/pragma-works/genspec-tools
 cd genspec-tools
-node tools/gs-demo/gs-demo.mjs /full/path/to/your/project
+node tools/gs-demo/gs-demo.mjs .
 ```
 
-Needs Node 18 or later and git. It copies your project to a temporary folder (your folder is only read), looks at the twelve things in about half a minute without running any of your code, and prints what it found, what is missing, and the three most useful next steps. It refuses a very large folder with a message. It is a quick look: for some elements it only reads how a gate is wired and says so; for others it says "not checked in the quick look".
+The last line looks at the clone itself; give it the path of your own project instead of the dot.
+
+Needs Node 18 or later and git. It copies the folder you give it to a temporary folder (your folder is only read), looks at the twelve things in about half a minute without running any of your code, and prints what it found, what is missing, and the three most useful next steps. It refuses a very large folder with a message. It is a quick look: for some elements it only reads how a gate is wired and says so; for others it says "not checked in the quick look".
 
 For the real test, which plants a violation in a throwaway clone and sees whether your gates refuse it (minutes, and it runs your project's code, so use a disposable environment for a project you did not write):
 
 ```
-node tools/gs-check/gs-check.mjs --repo /full/path/to/your/project --strict
+node tools/gs-check/gs-check.mjs --repo <full-path-to-your-project> --strict
 ```
 
 ## The twelve elements
@@ -65,9 +67,10 @@ The tools sit side by side and call each other by relative path (`gs-init` copie
 ## Tests
 
 ```
-node scripts/run-tests.mjs --quick     # every suite except the long gs-check controls
-node scripts/run-tests.mjs             # everything
+npm test
 ```
+
+`npm test` runs the fast tier (about 40 seconds: every suite except the slow gs-check ones and the three heavy ones, gs-decide, gs-snapshot and gs-init), which is what the pre-commit hook runs. An edit to a heavy suite is only run by the wider tiers and by CI. `npm run test:quick` (or `node scripts/run-tests.mjs --quick`) runs every suite except the long gs-check controls, and `npm run test:all` (or `node scripts/run-tests.mjs`) runs everything.
 
 Measured on Node 24 on Windows 11 and in a Linux container (Node 22):
 
