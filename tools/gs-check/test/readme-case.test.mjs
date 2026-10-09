@@ -28,6 +28,6 @@ test('a Readme.md project with tests and no hook: the baseline commit is not rep
     const out = r.stdout + r.stderr;
     assert.ok(!/baseline block|clean docs-only commit is blocked/.test(out), out);
     assert.match(out, /E05 /);
-    assert.match(out, /a count of elements by status, not a grade of the project/);
+    assert.match(out, /the summary counts elements by status; it is not a grade of the project/);
   } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); }
 });

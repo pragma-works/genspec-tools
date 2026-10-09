@@ -1887,7 +1887,8 @@ function printReport(report, verbose) {
     const rs = i.reasons || []; for (const r of (verbose ? rs : rs.slice(0, 3))) console.log('      - ' + r);
     if (verbose && i.subflags && Object.keys(i.subflags).length) console.log('      subflags: ' + JSON.stringify(i.subflags));
   }
-  console.log(`summary (${report.mode}; a count of elements by status, not a grade of the project): ${JSON.stringify(report.summary)}`);
+  console.log(`summary (${report.mode}): ${JSON.stringify(report.summary)}`); // this exact line is parsed by the verify formula and the smoke test: do not reword it
+  console.log('note: the summary counts elements by status; it is not a grade of the project.');
   if (report.migration) {
     for (const i of report.migration.items) { console.log(`${i.id} ${i.status.padEnd(14)} ${i.name || ''}`); for (const r of ((i.reasons || []).slice(0, verbose ? 99 : 3))) console.log('      - ' + r); if (verbose && i.evidence && Object.keys(i.evidence).length) console.log('      evidence: ' + JSON.stringify(i.evidence).slice(0, 600)); }
     console.log(`migration summary: ${JSON.stringify(report.migration.summary)}`);
