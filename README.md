@@ -17,7 +17,7 @@ The checks look for twelve things a team can write down and enforce (a spec with
 ## Thirty-second quickstart
 
 ```
-git clone https://github.com/jghiringhelli/genspec-tools
+git clone https://github.com/pragma-works/genspec-tools
 cd genspec-tools
 node tools/gs-demo/gs-demo.mjs /full/path/to/your/project
 ```

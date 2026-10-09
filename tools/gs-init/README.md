@@ -31,7 +31,7 @@ Agent commit marking (see https://genspec.dev): its L0 (trailers), L1 (the hook)
 
 ## Where the tools come from
 
-The installer copies `gs-check` (1 file), `gs-lock` (3 files) and `gs-decide` (4 files) from, in order: `--tools <folder>`, `$GS_TOOLS`, the folder next to this one. If one is missing it says so and where to fetch it (https://github.com/jghiringhelli/genspec-tools, `tools/<name>`). L2 refuses to start without `gs-decide`. L1 and L0 work without any copied tool: the gate it generates needs none.
+The installer copies `gs-check` (1 file), `gs-lock` (3 files) and `gs-decide` (4 files) from, in order: `--tools <folder>`, `$GS_TOOLS`, the folder next to this one. If one is missing it says so and where to fetch it (https://github.com/pragma-works/genspec-tools, `tools/<name>`). L2 refuses to start without `gs-decide`. L1 and L0 work without any copied tool: the gate it generates needs none.
 
 ## The proof
 
