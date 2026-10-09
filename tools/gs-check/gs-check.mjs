@@ -481,7 +481,7 @@ class Sandbox {
     if (!c.committed) return { blocked: null, note: 'could not create the probe commit', out: c.out };
     const name = `fx1-probe-${++this.pushCount}`;
     const r = git(this.root, ['push', '-q', 'fx1origin', `HEAD:refs/heads/${name}`], { timeout: this.cfg.timeouts.commitMs });
-    return { blocked: r.code !== 0, code: r.code, out: r.out.slice(-1500), network: this.isNetworkFailure(r.out) };
+    return { blocked: r.code !== 0, code: r.code, out: r.out.slice(-1500), network: this.isNetworkFailure(r.out), shallow: /shallow update not allowed/.test(r.out) };
   }
   // package.json scripts worth running as gates (allow-list), minus the ones that already fail on the clean head.
   gateScriptNames() {
@@ -831,6 +831,8 @@ function confounded(P, id, name, { commitOnly = false } = {}) {
   }
   if (!commitOnly && P.cPush && P.cPush.blocked === true) {
     if (P.cPush.network) return res(id, name, 'UNDETERMINABLE', ['a network failure blocked the baseline push (a hook fetched something)']);
+    // (scan, 2026-10-09) git refuses to push from a shallow clone (git clone --depth, most CI checkouts): that says nothing about the project's hooks
+    if (P.cPush.shallow) return res(id, name, 'UNDETERMINABLE', ['the repository under test is a shallow clone and git refuses pushes from it ("shallow update not allowed"), so the push-stage probe could not run: run git fetch --unshallow in your clone and check again']);
     return res(id, name, 'PARTIAL', ['a clean docs-only push is blocked (a pre-push gate is red at baseline), so a push-stage block does not show a gate for the violation (confounded by the baseline push block)'], { cPush: P.cPush.out }, { confounded_by: 'baseline-push-blocked' });
   }
   return null;

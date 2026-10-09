@@ -18,6 +18,7 @@ Every criterion below names the test file that checks it, and that test cites th
 - F-001.7 A project whose readme is named Readme.md MUST NOT have its clean baseline commit reported as blocked when it has no hook. verified by: tools/gs-check/test/readme-case.test.mjs
 - F-001.8 The README check MUST NOT run a command that changes the machine that runs it (a global install, a system package manager, a download piped into a shell), and MUST NOT run a sentence written in a code block as if it were a command. verified by: tools/gs-check/test/unit.test.mjs
 - F-001.9 The text output of gs-check MUST say that its summary is a count of elements by status and not a grade of the project. verified by: tools/gs-check/test/readme-case.test.mjs
+- F-001.10 When the repository under test is a shallow clone and git refuses the push of the push-stage probe, the checker MUST report UNDETERMINABLE and name the shallow clone, not a red pre-push gate. verified by: tools/gs-check/test/shallow.test.mjs
 
 ## F-002 gs-lock notices a change to a locked spec section and gates behaviour changes
 
