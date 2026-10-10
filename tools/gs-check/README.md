@@ -1,6 +1,8 @@
 # gs-check: the substrate conformance checker
 
-One file, `gs-check.mjs`. Node 18+, no dependencies, no model, no network. It judges the twelve items of the twelve-element substrate checklist (listed in the [top-level README](../../README.md)) as **present and working** on a git repository and prints, for each item, a status and the raw probe lines. MIT (see `../LICENSE`).
+> **Trust warning.** gs-check runs the project's own tests, git hooks and install steps. Only run it on code you trust, or let it use the container default: a throwaway Docker container with no network, a read-only copy, a non-root user, no access to your home folder and none of your environment variables. Without Docker it refuses and says how to go on. See [Trust and isolation](#trust-and-isolation).
+
+One file, `gs-check.mjs`. Node 18+, no dependencies, no model, no network of its own (a container it starts has none either, unless you allow it). It judges the twelve items of the twelve-element substrate checklist (listed in the [top-level README](../../README.md)) as **present and working** on a git repository and prints, for each item, a status and the raw probe lines. MIT (see `../LICENSE`).
 
 **Canonical copy: this file.** `tools/gs-check/gs-check.mjs` in this repository is the only maintained copy. The default configuration is embedded; `node gs-check.mjs --print-config` prints it and its SHA-256 (the value every report carries as `config_sha256`).
 
@@ -9,13 +11,27 @@ One file, `gs-check.mjs`. Node 18+, no dependencies, no model, no network. It ju
 ## Use
 
 ```
-node gs-check.mjs --repo <path> [--strict] [--both] [--verbose] [--migration] [--mutants N] [--only E01,E05] [--since <rev>] [--config <file>] [--out <report.json>] [--keep]
+node gs-check.mjs --repo <path> [--allow-network] [--time-limit MIN] [--memory 2g] [--cpus 2] [--run-on-host --i-trust-this-repo] [--strict] [--both] [--verbose] [--migration] [--mutants N] [--only E01,E05] [--since <rev>] [--config <file>] [--out <report.json>] [--keep]
 ```
 
-- It clones the **committed** state into a temporary folder and never modifies the repository under test. It executes project code (install scripts, hooks, tests): use a disposable container for a project you did not write.
+- It clones the **committed** state into a temporary folder and never modifies the repository under test. It executes project code (install scripts, hooks, tests), so by default it does that inside a throwaway container (next section).
 - `--strict` is **strict enforcement**: only a commit hook or a push hook that refuses a planted violation is credited. A package script that fails (`npm run check`) is **not** credited, because nothing runs it unless a person does. The default mode credits such scripts (it is what the development loop used); `--both` runs both and prints a table with the two columns. A project whose E05 to E07 or E10 depend on a script reads PASS by default and PARTIAL in strict mode (controls `GS2` and `R06`).
 - `--verbose` prints every reason and the probe flags of each item (what the verify formula pastes). `--only` pulls in the items the chosen ones depend on (E10 needs E02 and E04). `--since <rev>` limits the commit check (E09) to `rev..HEAD`.
 - Exit 0 only if all twelve are PASS; 1 otherwise; 2 on a usage error. Status values: `PASS` present and working, `PARTIAL` present and not (fully) working, `ABSENT`, `UNDETERMINABLE` (an environment fault: network, missing tool, timeout).
+
+## Trust and isolation
+
+gs-check judges whether a project's gates really refuse a bad change, so it has to run them: the README install steps, the git hooks and the tests of the project. On a project you did not write, that is running a stranger's program. So:
+
+- **Default: a throwaway Docker container.** It needs Docker running (Linux containers). The first run builds a small image (Node 22, Python, git; it downloads packages once, so it needs the network that one time). Each run: a fresh clone of the committed state, mounted **read-only**; a **non-root** user; the root file system read-only with only `/tmp` writable (2 GB); **no Linux capabilities** and no privilege gain; **2 GB memory, 2 CPUs, 512 processes, 60 minutes** (`--memory`, `--cpus`, `--time-limit`); **no host environment variables**, no credentials, no mount of your home folder or of anything else; and the container is removed afterwards. The report comes back as text on standard output and gs-check writes `--out` itself on the host, so the container needs no writable mount.
+- **Network policy, precisely.** What Docker can enforce is on or off, not "only these servers". The default is **off** (`--network none`). A project whose install step downloads packages then behaves as on a machine without the internet: the install fails and is reported as such (usually `UNDETERMINABLE` or `PARTIAL`); a project that needs no download is unaffected. `--allow-network` gives the container ordinary outbound access (a bridge network): the project's code can then reach the whole internet, although nothing secret is inside the container to send. Allowing only some registries needs a proxy, which this tool does not provide.
+- **Python.** In the container a project's virtual environment can see the image's own pytest, because the container is the isolation and may have no network. On the host it sees nothing of the machine.
+- **Without Docker it refuses** (exit 2, nothing is run) and says the two ways forward: install Docker, or, for code you wrote or fully trust, add `--run-on-host --i-trust-this-repo`. Both flags are needed; the tool prints a red warning and asks you to type the repository name. With `CI=true` it does not ask. It never runs on the host silently.
+- **Already in a container** (`/.dockerenv`, or `GS_CHECK_IN_CONTAINER=1`, which gs-check sets for itself inside its own container): it runs directly, because that is the isolation you asked for.
+- **Not covered.** A container is not a virtual machine: a kernel or runtime escape is possible in principle, and Docker Desktop shares a kernel with its VM. `--allow-network` removes the network wall. A hostile project can still use up the CPU and memory limits for the time limit, and it can lie to the checker (a report is only as honest as the code that ran). For really hostile code use a throwaway virtual machine.
+- **Library use.** `import { run } from './gs-check.mjs'` does no isolation: the caller chooses (this repository's own tests do, on projects they build themselves). Reports say `isolation: container`, `host-trusted`, `already-in-container` or `library`.
+
+`gs demo` (gs-demo) runs none of the project's code: it reads files and runs `git log` and the tool's own `gs-lock` on a copy, with every git setting that names a program to run switched off (a test plants such a setting and other canaries, and none fires).
 
 ## Migration checks (`--migration`)
 

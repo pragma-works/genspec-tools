@@ -4,6 +4,9 @@ All notable changes to this repository. The tools are not versioned separately y
 
 ## [Unreleased]
 
+### Security
+- `gs-check` no longer runs a project's install steps, hooks and tests on your machine by default. It runs in a throwaway Docker container (no network unless `--allow-network`, read-only copy, non-root, memory/CPU/process/time limits, no host environment) and refuses without Docker; `--run-on-host --i-trust-this-repo` (and a typed repository name, unless `CI=true`) is the explicit way around. `gs check` and the proof of `gs-init` follow it (`gs-init --proof-on-host` for your own project). `gs demo` could run a program named in the examined folder's `.git/config` (a file-system monitor): fixed, and a test with canaries proves it executes nothing from the target.
+
 ### Added
 - `bin/gs.mjs`, the `gs` command: `npx github:pragma-works/genspec-tools <command>` runs the tools with no clone and no registry account. Commands: `demo` (also `--sample`), `start`, `init`, `check`, `lock`, `decide`, `snapshot`, `update`, `uninstall`, `doctor`, `help`.
 - `gs-init` writes an install record (`.gs-manifest.json`) and has `--uninstall`, which removes only what the record lists and keeps any file changed since; `--also` writes pointer files for further assistants (`AGENTS.md`, `CLAUDE.md`, Cursor rules).

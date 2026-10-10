@@ -95,3 +95,18 @@ Every criterion below names the test file that checks it, and that test cites th
 ### Decisions
 
 Why it is built this way: docs/decisions/0001-adopt-generative-specification.md.
+
+## F-008 Code from a project under examination runs only where it can do no harm
+
+ runs the project's own install steps, git hooks and tests, which is running a stranger's program when the project is not yours. So by default it runs inside a throwaway container, never silently on the host, and  runs nothing of the target at all. What a container does and does not enforce is in tools/gs-check/README.md, section "Trust and isolation".
+
+### Acceptance criteria
+
+- F-008.1  MUST refuse with exit 2, in plain words that name the two ways forward (install Docker, or the explicit host flags), and MUST run no project code and judge no element, when Docker is not running and the host flags are not both given. verified by: tools/gs-check/test/isolation.test.mjs
+- F-008.2 Running on the host MUST need both  and  (either alone is refused), MUST print a warning, and MUST require the repository name typed by a person unless CI=true; a wrong or missing name MUST run nothing; the report MUST say . verified by: tools/gs-check/test/isolation.test.mjs
+- F-008.3 Inside a container already (the tools' own CI, , )  MUST run directly without the flags. verified by: tools/gs-check/test/isolation.test.mjs
+- F-008.4 In the container the twelve statuses and the exit code MUST equal those of the host run on a good Node project, a good Python project, a project wired to the reference lock tool, and three broken projects. verified by: tools/gs-check/test/isolation.test.mjs
+- F-008.5 A project whose README install step and test write files outside the clone and in the home folder and read an environment variable MUST be contained: none of the files appears on the host, the variable and the host home path MUST NOT be visible to it, and the same project run on the host MUST do all of that (the control). verified by: tools/gs-check/test/isolation.test.mjs
+- F-008.6 The container MUST start with no network unless  is given, MUST say which it did, and MUST leave the original repository untouched. verified by: tools/gs-check/test/isolation.test.mjs
+- F-008.7 , directly and through the front door, MUST execute nothing from the target: a project with canaries in its package scripts, hooks, its own lock tool, a gate script and the programs named in its  MUST fire none, while a control shows the git-config canary is live. verified by: tools/gs-demo/test/no-execution.test.mjs
+- F-008.8 The proof of  MUST run in the container, or be skipped in plain words when Docker is missing; running it on the host MUST need  and a typed folder name unless CI=true. verified by: tools/gs-init/test/init.test.mjs
