@@ -65,7 +65,8 @@ Try it (changes nothing):
 Set up and keep up:
   gs init               add the notes and checks to this project; asks two questions in a terminal
       --level L0|L1|L2    L0 notes only, L1 notes plus checks that refuse a bad commit (default), L2 plus a server check
-      --agents claude,codex,cursor   which assistant files to write (CLAUDE.md, AGENTS.md, .cursor rules)
+      --assistant claude|copilot|codex|gemini|agents|cursor|none   which instruction files to write (CLAUDE.md, .github/copilot-instructions.md, AGENTS.md,
+                          GEMINI.md, .cursor rules); several with commas; none = only the neutral AGENTS.md. (--agents is the same flag)
       --dry-run           list what would change and write nothing
       --yes               ask nothing (for scripts)
   gs update             fetch the newest tools and run the setup again (backs up anything it changes)
@@ -100,12 +101,17 @@ function cmdDemo(args) {
 }
 
 // ------------------------------------------------------------------ init
-const AGENT_FILES = { claude: 'CLAUDE.md', 'claude-code': 'CLAUDE.md', 'claude.md': 'CLAUDE.md', codex: 'AGENTS.md', copilot: 'AGENTS.md', gemini: 'AGENTS.md', agents: 'AGENTS.md', 'agents.md': 'AGENTS.md', cursor: 'cursor' };
+// Which instruction file each assistant reads. Gemini CLI reads GEMINI.md (the name is inside its package); Copilot CLI's `init` writes
+// .github/copilot-instructions.md (its own --help); Codex reads AGENTS.md (the name is inside its binary); Cursor reads .cursor/rules.
+// `none` means no assistant-specific file: the neutral AGENTS.md carries the map and the prompt is used by hand.
+const COPILOT_FILE = '.github/copilot-instructions.md';
+const ALL_FILES = ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', COPILOT_FILE, 'cursor'];
+const AGENT_FILES = { claude: 'CLAUDE.md', 'claude-code': 'CLAUDE.md', 'claude.md': 'CLAUDE.md', codex: 'AGENTS.md', copilot: COPILOT_FILE, gemini: 'GEMINI.md', 'gemini.md': 'GEMINI.md', agents: 'AGENTS.md', 'agents.md': 'AGENTS.md', cursor: 'cursor', none: 'AGENTS.md' };
 function parseAgents(list) {
   const out = [];
   for (const raw of list.split(',').map(x => x.trim().toLowerCase()).filter(Boolean)) {
-    if (raw === 'all') { out.push('CLAUDE.md', 'AGENTS.md', 'cursor'); continue; }
-    const f = AGENT_FILES[raw]; if (!f) fail(`I do not know the assistant "${raw}". Use claude, codex (or copilot, gemini), cursor, or all.`);
+    if (raw === 'all') { out.push(...ALL_FILES); continue; }
+    const f = AGENT_FILES[raw]; if (!f) fail(`I do not know the assistant "${raw}". Use claude, copilot, codex, gemini, agents, cursor, none, or all.`);
     out.push(f);
   }
   return [...new Set(out)];
@@ -113,7 +119,7 @@ function parseAgents(list) {
 async function cmdInit(args, { forceLevel = null, friendly = false } = {}) {
   needGit();
   const yes = takeFlag(args, '--yes', '-y');
-  let level = takeVal(args, '--level') || forceLevel, agents = takeVal(args, '--agents');
+  let level = takeVal(args, '--level') || forceLevel, agents = takeVal(args, '--assistant') || takeVal(args, '--agents');
   const explicit = args.includes('--sentinel') || args.includes('--also');
   const here = path.resolve(cwd());
   if (here === os.homedir() || path.parse(here).root === here) fail(`${here} looks like your home folder or a drive root, not a project. Go into the project folder and run this again.`);
@@ -132,11 +138,13 @@ async function cmdInit(args, { forceLevel = null, friendly = false } = {}) {
       const dflt = has('CLAUDE.md') ? '1' : has('AGENTS.md') ? '2' : '1';
       console.log('Which assistant do you use? (several are fine, like 1,3)');
       console.log('  1  Claude Code   (writes CLAUDE.md)');
-      console.log('  2  Codex, Copilot, Gemini and others   (writes AGENTS.md)');
+      console.log('  2  Codex and others that read AGENTS.md   (writes AGENTS.md)');
       console.log('  3  Cursor   (writes .cursor/rules/gs.mdc)');
+      console.log('  4  Gemini CLI   (writes GEMINI.md)');
+      console.log('  5  GitHub Copilot   (writes .github/copilot-instructions.md)');
       const a = await q.ask(`Choose [${dflt}]: `);
-      const pick = (a || dflt).split(/[ ,]+/).filter(Boolean), names = { 1: 'claude', 2: 'codex', 3: 'cursor' };
-      if (pick.some(x => !names[x])) { q.close(); fail('please answer with the numbers 1, 2 or 3.'); }
+      const pick = (a || dflt).split(/[ ,]+/).filter(Boolean), names = { 1: 'claude', 2: 'codex', 3: 'cursor', 4: 'gemini', 5: 'copilot' };
+      if (pick.some(x => !names[x])) { q.close(); fail('please answer with the numbers 1 to 5.'); }
       agents = pick.map(x => names[x]).join(',');
     }
     q.close();
@@ -144,7 +152,7 @@ async function cmdInit(args, { forceLevel = null, friendly = false } = {}) {
   const pass = [];
   if (agents) {
     const files = parseAgents(agents);
-    const primary = files.includes('CLAUDE.md') ? 'CLAUDE.md' : 'AGENTS.md';
+    const primary = ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', COPILOT_FILE].find(f => files.includes(f)) || 'AGENTS.md';
     pass.push('--sentinel', primary);
     const more = files.filter(f => f !== primary);
     if (more.length) pass.push('--also', more.join(','));
@@ -192,8 +200,8 @@ function cmdDoctor() {
   const man = readJson(MANIFEST), cfg = readJson('.gs.json');
   row(!!man, man ? `gs init has been run here (level ${man.level})` : 'gs init has not been run here (or it ran before the install record existed)', 'run: gs init');
   const level = (man && man.level) || (cfg && cfg.level) || null;
-  const sent = ['CLAUDE.md', 'AGENTS.md', '.cursor/rules/gs.mdc'].filter(has);
-  row(sent.length > 0, sent.length ? `assistant files: ${sent.join(', ')}` : 'no assistant file (CLAUDE.md, AGENTS.md or .cursor/rules/gs.mdc)', 'run: gs init');
+  const sent = ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/gs.mdc'].filter(has);
+  row(sent.length > 0, sent.length ? `assistant files: ${sent.join(', ')}` : 'no assistant file (CLAUDE.md, AGENTS.md, GEMINI.md, .github/copilot-instructions.md or .cursor/rules/gs.mdc)', 'run: gs init');
   row(has('docs/spec/SPEC.md'), has('docs/spec/SPEC.md') ? 'spec: docs/spec/SPEC.md' : 'no spec file', 'run: gs init');
   if (level && level !== 'L0') {
     row(has('scripts/gs-gate.mjs'), 'the checks: scripts/gs-gate.mjs', 'run: gs init');

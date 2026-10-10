@@ -253,3 +253,21 @@ test('C14 the other tools are reached through gs with their own options (lock sh
   const r = gs(TMP, ['lock']);
   assert.match(r.stdout + r.stderr, /usage: gs-lock/);
 });
+
+// F-009.8
+test('C15 --assistant picks the instruction files: claude, copilot, codex, gemini, agents, cursor, none; several may be given; an unknown name is refused with nothing written', () => {
+  const cases = { claude: ['CLAUDE.md'], copilot: ['.github/copilot-instructions.md'], codex: ['AGENTS.md'], gemini: ['GEMINI.md'], agents: ['AGENTS.md'], none: ['AGENTS.md'] };
+  for (const [a, files] of Object.entries(cases)) {
+    const dir = project(NODE), r = gs(dir, [...INIT, '--level', 'L0', '--assistant', a]);
+    assert.equal(r.status, 0, a + ': ' + r.stderr);
+    for (const f of files) assert.match(read(dir, f), /how work is done here/i, a + ' ' + f);
+    for (const f of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', '.github/copilot-instructions.md', '.cursor/rules/gs.mdc'].filter(x => !files.includes(x))) assert.ok(!has(dir, f), a + ' must not write ' + f);
+  }
+  const cu = project(NODE); assert.equal(gs(cu, [...INIT, '--level', 'L0', '--assistant', 'cursor']).status, 0);
+  assert.ok(has(cu, '.cursor/rules/gs.mdc') && has(cu, 'AGENTS.md'));
+  const both = project(NODE); assert.equal(gs(both, [...INIT, '--level', 'L0', '--assistant', 'copilot,gemini,claude']).status, 0);
+  assert.match(read(both, 'CLAUDE.md'), /how work is done here/i); assert.match(read(both, 'GEMINI.md'), /Read `CLAUDE.md` first/); assert.match(read(both, '.github/copilot-instructions.md'), /Read `CLAUDE.md` first/);
+  const u = gs(both, ['uninstall', '--yes']); assert.equal(u.status, 0, u.stderr); assert.ok(!has(both, '.github'), 'the folder gs made is gone');
+  const bad = project(NODE), before = tree(bad), r = gs(bad, ['start', '--yes', '--no-proof', '--assistant', 'emacs']);
+  assert.equal(r.status, 2); assert.match(r.stderr, /do not know the assistant "emacs"/); assert.deepEqual(tree(bad), before);
+});
