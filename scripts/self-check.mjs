@@ -18,9 +18,15 @@ const NOT_CLAIMED = { E10: 'no spec lock: gs-lock is not wired here (the L1 leve
 const since = process.argv.includes('--since') ? process.argv[process.argv.indexOf('--since') + 1] : null;
 
 const dir = mkdtempSync(join(tmpdir(), 'self-check-')), out = join(dir, 'report.json');
-const args = [join(ROOT, 'tools/gs-check/gs-check.mjs'), '--repo', ROOT, '--strict', '--out', out, ...(since ? ['--since', since] : [])];
+// gs-check runs the project's own tests and hooks. Here the project is this repository, which is ours and is also what CI has just tested, but the default is still the
+// throwaway container (GitHub's Linux runners have Docker). Only when Docker is not running do we run on the host, on purpose and printed, and only with --on-host or CI=true.
+const docker = spawnSync('docker', ['info', '--format', '{{.OSType}}'], { encoding: 'utf8', timeout: 20000 });
+const dockerUp = docker.status === 0 && /linux/.test(docker.stdout || '');
+const onHost = process.argv.includes('--on-host') || (!dockerUp && process.env.CI === 'true');
+if (!dockerUp && !onHost) { console.error('self-check: Docker with Linux containers is not running, so gs-check would refuse. Start Docker, or (this repository is our own code) pass --on-host and type the folder name.'); }
+const args = [join(ROOT, 'tools/gs-check/gs-check.mjs'), '--repo', ROOT, '--strict', '--out', out, ...(since ? ['--since', since] : []), ...(onHost ? ['--run-on-host', '--i-trust-this-repo'] : [])];
 const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
-const r = spawnSync(process.execPath, args, { encoding: 'utf8', env, maxBuffer: 1 << 26 });
+const r = spawnSync(process.execPath, args, { encoding: 'utf8', env, maxBuffer: 1 << 26, stdio: onHost && process.env.CI !== 'true' ? ['inherit', 'pipe', 'inherit'] : ['ignore', 'pipe', 'pipe'] });
 process.stdout.write(r.stdout || ''); process.stderr.write(r.stderr || '');
 let rep; try { rep = JSON.parse(readFileSync(out, 'utf8')); } catch { console.error('self-check: gs-check produced no report'); process.exit(1); } finally { rmSync(dir, { recursive: true, force: true }); }
 const st = Object.fromEntries(rep.items.map(i => [i.id, i.status]));
