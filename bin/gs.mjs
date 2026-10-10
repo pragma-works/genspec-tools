@@ -7,7 +7,7 @@
 // questions, runs it, and says in plain words what it got and what to do next.
 //
 //   npx github:pragma-works/genspec-tools <command>        (no clone, no registry account; needs Node 18+ and git)
-//   gs demo [folder|--sample]    gs start    gs init [--level L0|L1|L2] [--dry-run]    gs check    gs lock    gs decide    gs snapshot
+//   gs demo [folder|--sample]    gs start [--assistant X] [--launch cli]    gs init [--level L0|L1|L2] [--dry-run]    gs check    gs lock    gs decide    gs snapshot
 //   gs update    gs uninstall    gs doctor    gs help
 //
 // Exit codes follow the tool that was run; 2 is a usage or environment problem.
@@ -16,7 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fs.realpathSync(fileURLToPath(import.meta.url))), '..');
 const REPO_URL = 'https://github.com/pragma-works/genspec-tools';
@@ -60,7 +60,9 @@ Needs Node 18+ and git. No account, no install, no network except \`gs update\`.
 Try it (changes nothing):
   gs demo [folder]      a quick look (seconds) at a folder: what is there, what is missing
   gs demo --sample      the same look at a small example project that comes with gs
-  gs start              a short walk-through for first-timers: a look, then the lightest setup (L0)
+  gs start              first time: a look, the lightest setup (L0), an inventory of your code (no model), and a prompt
+                        for YOUR assistant that drafts the spec and asks you questions (it never runs the assistant itself)
+      --launch claude|copilot|codex|gemini   start that assistant now with the prompt (only if you ask)
 
 Set up and keep up:
   gs init               add the notes and checks to this project; asks two questions in a terminal
@@ -161,20 +163,51 @@ async function cmdInit(args, { forceLevel = null, friendly = false } = {}) {
   return run(TOOL('gs-init'), [...pass, ...args], { cwd: cwd() });
 }
 
-// ------------------------------------------------------------------ start (friendly mode)
+// ------------------------------------------------------------------ start (friendly mode, and the hand-off to the person's assistant)
+// Deterministic here: the look, the L0 setup, the inventory (.gs/inventory.*) and the prompt file (.gs/start-prompt.md), all written without a model.
+// Not deterministic, and not run from here: the assistant that reads the prompt. It is started only with --launch, which the person types.
 async function cmdStart(args) {
-  const yes = args.includes('--yes') || args.includes('-y');
+  const yes = args.includes('--yes') || args.includes('-y'), dry = args.includes('--dry-run');
+  const S = await import(pathToFileURL(TOOL('gs-start')).href);
+  const launchCli = takeVal(args, '--launch');
+  if (launchCli) {
+    if (!S.CLIS.includes(launchCli)) fail(`--launch takes ${S.CLIS.join(', ')} (got "${launchCli}"). For any other assistant: ${S.GENERIC}.`);
+    if (!S.detectClis().some(c => c.cli === launchCli)) fail(`${launchCli} was not found on your PATH, so nothing was started and nothing was written. Install it, or: ${S.GENERIC}.`);
+  }
   console.log('Welcome. This takes about a minute and asks before it changes anything.');
   console.log('  1. First it takes a quick look at your project and tells you what is there and what is missing. It only reads.');
-  console.log('  2. Then it adds a few small notes files so your AI assistant knows how your project works. Nothing runs by itself.');
-  console.log('  3. It never edits your code, never commits, and never uses the internet.');
+  console.log('  2. Then it adds a few small notes files so your AI assistant knows how your project works, and a prompt that makes your assistant draft a spec and ask you questions. Nothing runs by itself.');
+  console.log('  3. It never edits your code, never commits, and never uses the internet. It starts your assistant only if you add --launch.');
   console.log('  4. To take it all out again: gs uninstall.   To see what is installed: gs doctor.');
   console.log('  Press Enter to go on, or Ctrl+C to stop.');
   if (!yes && canAsk()) { const q = makeAsker(); await q.ask(''); q.close(); }
   const d = cmdDemo(['.']);
   if (d !== 0) return d;
   console.log('');
-  return cmdInit(args, { forceLevel: 'L0', friendly: true });
+  const before = S.inventory(cwd());
+  if (before.mode === 'documents') {
+    say(S.DOCUMENTS_NOTE);
+    say(`what was seen: ${before.files.total} files, ${before.files.source} of them source code. Nothing was written. If you still want the notes files, run: gs init`);
+    return 0;
+  }
+  process.env.GS_HANDOFF = '1'; // gs-init then says that the assistant writes the real requirements, not that you do
+  const code = await cmdInit(args, { forceLevel: 'L0', friendly: true });
+  if (code !== 0) return code;
+  const inv = S.inventory(cwd());
+  console.log('');
+  say(`what was read without a model: mode ${inv.mode} (${inv.modeWhy})${dry ? '; dry run, nothing written' : ''}`);
+  for (const o of S.writeHandoff(cwd(), inv, { dryRun: dry })) console.log(`  ${o.kind.padEnd(6)} ${o.rel}${o.backup ? '   (backup ' + o.backup + ')' : ''}`);
+  if (dry) return 0;
+  console.log('');
+  for (const l of S.nextSteps(inv, S.detectClis())) console.log(l);
+  if (launchCli) {
+    console.log('');
+    say(`starting ${launchCli} now, as you asked: ${S.handCommand(launchCli)}`);
+    const r = S.launch(launchCli, cwd());
+    if (r.error) say(r.error);
+    return r.status;
+  }
+  return 0;
 }
 
 // ------------------------------------------------------------------ check, lock, decide, snapshot

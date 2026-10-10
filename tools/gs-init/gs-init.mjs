@@ -752,7 +752,7 @@ function plain(level, res, p) {
     L1: 'the spec lock and the co-change gate are for day 7 to 30, once there is code with ids; signed acceptances are L2; the server does not re-check yet',
     L2: 'the spec lock and the co-change gate are for day 7 to 30; ' + (p && false ? '' : 'acceptances are signed only after you give a public key (--pubkey) and make the server check required in your repository settings'),
   }[level];
-  return [`You got: ${gets}.`, `Do next: ${next}.`, `Not yet: ${notYet}.`];
+  return [`You got: ${gets}.`, `Do next: ${process.env.GS_HANDOFF === '1' && level === 'L0' ? 'your assistant will now write the real requirements from your code and ask you questions (see the three lines below); nothing is final until you ratify it' : next}.`, `Not yet: ${notYet}.`];
 }
 
 export async function main(argv) {
