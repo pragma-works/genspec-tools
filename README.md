@@ -59,13 +59,35 @@ If you will use it more than once, the short form is a global install from the s
 | Command | What it does |
 |---|---|
 | `gs demo [folder]` | The quick look (seconds): what is there, what is missing, the three most useful next steps. `--sample` uses the example project. Reads a copy, runs none of your code |
-| `gs start` | For a first time: five lines of explanation, the quick look, then the lightest setup (level L0, notes only) |
-| `gs init` | Sets the project up. In a terminal it asks two questions (how deep, and which assistant files: `CLAUDE.md`, `AGENTS.md`, Cursor rules). For scripts: `gs init --level L1 --agents claude,codex --yes`. `--dry-run` lists what it would do and writes nothing |
+| `gs start` | For a first time: the quick look, the lightest setup (level L0), an inventory of your code read without a model, and a prompt for **your** assistant that makes it draft a spec and ask you questions with recommended answers. Details below. `--assistant`, `--launch`, `--dry-run`, `--verify-spec` |
+| `gs init` | Sets the project up. In a terminal it asks two questions (how deep, and which assistant files: `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md`, Cursor rules). For scripts: `gs init --level L1 --assistant claude,codex --yes`. `--dry-run` lists what it would do and writes nothing |
 | `gs doctor` | What is installed here, what is missing, and whether the tool copies match this version |
 | `gs update` | Fetches the newest tools from GitHub and runs the setup again; anything it replaces is copied to `.gs-init-backup/` first |
 | `gs uninstall` | Takes out only what `gs init` wrote, using the record it made (`.gs-manifest.json`). A file you changed since stays. Your code and your git history are never touched |
 | `gs check` | The full test (minutes): plants mistakes in a throwaway copy of your last commit and sees whether your checks refuse them. It runs your project's own code |
 | `gs lock`, `gs decide`, `gs snapshot` | The other tools, with their usual options |
+
+### `gs start`: from a folder to a spec proposal, with your own assistant
+
+```text
+cd your-project
+npx github:pragma-works/genspec-tools start --assistant claude     # or copilot, codex, gemini, agents, cursor, none
+```
+
+`gs start` splits the work between a program, your assistant and you. It cannot be deterministic end to end, because drafting a spec from code is a job for a model; so it keeps the part a program can do and hands the rest over in writing.
+
+| Who | What | Deterministic |
+|---|---|---|
+| `gs` (a program) | the quick look; the lightest setup (L0: your assistant's instruction file, a placeholder spec, a decisions folder, open questions); `.gs/inventory.json` and `.gs/inventory.md`: languages, package managers, test commands, entry points, folders, routes and command names where a pattern finds them, dependencies, documents, git history, CI, and the state of the spec; `.gs/start-prompt.md` | yes: same project, same bytes; no model, no network, none of your code is run |
+| your assistant (Claude Code, Copilot CLI, Codex, Gemini, or another) | reads the inventory and the code; drafts `docs/spec/SPEC.md` with every section of the template, each statement tagged `FOUND IN CODE` (with file and line) or `ASSUMED`; writes what it could not decide to `docs/open-questions.md`; asks you the questions one at a time or in small batches, each with a recommended answer and the reason (reply `ok` to take it); updates the spec with your answers | no: the quality of the proposal is the model's |
+| you | read the proposal, change what is wrong, **ratify it** (`gs decide add`, or accept the decision record under your own name). The prompt forbids the assistant to record a ratification | not delegable |
+| `gs` again | `gs start --verify-spec` checks that every `FOUND IN CODE` tag names a file that exists and a line that is in it; `gs check` is the full test of the substrate | yes |
+
+What it prints at the end is three lines in plain words and, for each of `claude`, `copilot`, `codex`, `gemini` found on your PATH, the exact command that hands it the prompt, for example `claude "Read .gs/start-prompt.md and follow it step by step."`. The flags come from each CLI's own `--help` (see `tools/gs-start/README.md`); for any other assistant: open it in this folder and say `follow .gs/start-prompt.md`. `gs start` never starts an assistant by itself; `--launch claude|copilot|codex|gemini` starts that one, because you asked.
+
+The prompt depends on the folder: with no code it asks you for the intent first; with code and no spec it drafts a proposal; with a draft it continues; with a complete spec it says "verify and sync". A folder that is mostly not code (documents, content, assets) gets the note "this is mostly not code, it needs a different profile" and nothing is written. `--assistant` chooses the instruction file (`CLAUDE.md`, `.github/copilot-instructions.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules/gs.mdc`; several with commas; `none` writes only the neutral `AGENTS.md`). `--dry-run` shows what would be written.
+
+What this does not do: it does not make the proposal right. A `FOUND IN CODE` tag is the assistant's claim; `--verify-spec` checks only that the place it names exists. The questions with recommendations are the model's reading of your code, and a recommendation you accept with `ok` is only as good as that reading.
 
 Measured on 2026-10-09 through the GitHub address above, wall clock, one run each. Cold means an empty npm cache (the first run ever on that machine, download included); warm means the same command again.
 
@@ -134,6 +156,7 @@ The method behind them is at https://genspec.dev.
 | [`gs-lock`](tools/gs-lock) | The spec lock (`gs-lock`), the co-change gate (`gs-cochange`) and one-command red proofs (`gs-redproof`) | That a tagged file really implements its spec section; `ratify` is a command anyone, or any agent, can run |
 | [`gs-decide`](tools/gs-decide) | An append-only, hash-chained record of decisions and ratifications under a named git identity, optionally signed; a hook that refuses protected changes without one; `gs-attribution-hook` for marking agent-made commits; `gs-decide-ci` for the server re-check | That the person who ratified understood what they ratified; local hooks can be skipped, so the CI re-check must be a required check |
 | [`gs-snapshot`](tools/gs-snapshot) | A dated, deterministic report of what a project can compute about itself, and the difference since the last one | Anything about correctness; counts are counts |
+| [`gs-start`](tools/gs-start) | Reads a project with a program (stack, test commands, entry points, routes, docs, history) into `.gs/inventory.*`, and writes the prompt that makes your own assistant draft a spec proposal and ask you questions; `--verify-spec` checks the file and line of each `FOUND IN CODE` tag | That the proposal is right: the model writes it, and the tag check reads only that the place exists |
 | [`gs-init`](tools/gs-init) | An installer that wires a project at one of three depths (L0 commit trailers, L1 hooks and gates, L2 signed ratifications and CI), with `--dry-run`, an install record and `--uninstall` | That the spec is right, who should ratify, or that branch protection is on |
 
 The tools sit side by side and call each other by relative path (`gs-init` copies `gs-check`, `gs-lock` and `gs-decide` into a project; `gs-snapshot` and `gs-demo` use `gs-lock`; the tests of several tools use the control projects of `gs-check`). Nothing is vendored.
@@ -160,10 +183,11 @@ Measured on Node 24 on Windows 11 and in a Linux container (Node 22):
 | gs-snapshot | 19 | 19 pass | 19 pass |
 | gs-init | 19 | 19 pass | 19 pass |
 | gs-demo | 13 | 13 pass | 13 pass |
-| gs (dispatcher, install record, uninstall, update) | 14 | 14 pass | 14 pass |
-| **Total** | **294** | see below | see below |
+| gs (dispatcher, install record, uninstall, update, assistant files) | 15 | 15 pass (2026-10-09) | 14 pass; the 15th not yet run |
+| gs-start (inventory, prompt, hand-off) | 10 | 10 pass (2026-10-09) | not yet run here |
+| **Total** | **294** (305 with gs-start) | see below | see below |
 
-The 280 other tests were measured on 2026-10-08; the 14 of `gs` on 2026-10-09 (Windows Node 24, Linux Node 22 and Node 18); the 294 have not been run together in one pass here. CI runs everything on Linux and Windows with Node 20 and 22 (`.github/workflows/test.yml`).
+The gs-demo and gs-init rows are older than their suites (now 25 and 20 tests). The 280 other tests were measured on 2026-10-08; the 14 of `gs` on 2026-10-09 (Windows Node 24, Linux Node 22 and Node 18); the 294 have not been run together in one pass here. CI runs everything on Linux and Windows with Node 20 and 22 (`.github/workflows/test.yml`).
 
 ## Licence
 

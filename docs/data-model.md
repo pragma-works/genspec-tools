@@ -12,6 +12,8 @@ This repository has no database. The data are the files the tools read and write
 | `docs/baseline.json` | `scripts/gs-gate.mjs ratchet --raise` | `{"floors": {...}, "ceilings": {...}}`; a floor may only go up, a ceiling only down |
 | `docs/open-questions.md` | people | questions; a line starting `OPEN:` blocks the commit |
 | `.gs-manifest.json` | `gs-init` | the install record: `files` (path to hash of what was written), `blocks` (path to the marked block it added, and whether the whole file was its own), `config` (settings keys it set, with the previous value), `gitConfig` (`hooksPath`), level and version; read by `gs-init --uninstall` and `gs doctor`; meant to be committed |
+| `.gs/inventory.json`, `.gs/inventory.md` | `gs start` | facts a program read (schema `gs-inventory/1`): mode, languages, stacks, test commands, entry points, routes, folders, documents, spec state, git summary, CI; no timestamp, so the same state gives the same bytes; derived, regenerated on each `gs start` |
+| `.gs/start-prompt.md` | `gs start` | the self-contained prompt for the person's assistant; its content depends on the mode (brownfield, greenfield, continue, sync) |
 | `.gs.json` | `gs-init`, people | level, stack, sentinel, hooks folder, gate commands |
 | gs-check report | `gs-check --out` | JSON: mode, head commit, config hash, one item per element with status, reasons and flags |
 | `docs/snapshots/snapshot-YYYY-MM-DD.{md,json}` | `gs-snapshot` | deterministic; ignored by git in this repository |

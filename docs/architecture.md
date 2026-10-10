@@ -9,6 +9,7 @@ genspec-tools is a set of small command-line tools in plain Node (18 or later, n
 | gs-decide | `tools/gs-decide/gs-decide.mjs`, `gs-decide-hook.mjs`, `gs-attribution-hook.mjs`, `gs-decide-ci.mjs` | `docs/decisions.log.md`, git identity, staged files | `docs/decisions.log.md` (append only) |
 | gs-snapshot | `tools/gs-snapshot/gs-snapshot.mjs` | everything the others can read | `docs/snapshots/` |
 | gs-init | `tools/gs-init/gs-init.mjs` | the project it is run in | the sentinel, spec, decisions, gate, hooks and floor of that project, after a backup |
+| gs-start | `tools/gs-start/gs-start.mjs` (used by `gs start`; also callable alone) | the project's files and manifests, read-only git history, the PATH (as file names) | `.gs/inventory.json`, `.gs/inventory.md`, `.gs/start-prompt.md`, recorded in `.gs-manifest.json`; it starts an assistant only with `--launch` |
 | gs-demo | `tools/gs-demo/gs-demo.mjs` | a copy of a project folder | standard output only |
 | gs | `bin/gs.mjs` (the `bin` of `package.json`, so `npx github:pragma-works/genspec-tools <command>` works with no clone) | the arguments, the project's `.gs-manifest.json` and `.gs.json`, and for `update` a fetched copy of this repository | nothing itself; it runs the tool that does the work |
 
