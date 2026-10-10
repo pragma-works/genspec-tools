@@ -241,11 +241,11 @@ test('S8 --launch starts only the assistant named, with the prompt as its first 
 
 // F-009.9
 test('S10 --verify-spec finds a FOUND IN CODE tag whose file or line does not exist, reports lines without a tag, and says what it does not check', () => {
-  const spec = '# x\n\n## F-001 Orders [FOUND IN CODE: src/index.js:1]\n\n- F-001.1 The API MUST list orders. verified by: test/orders.test.js [FOUND IN CODE: src/index.js:2-3] [observed]\n- F-001.2 It MUST not leak. verified by: manual step [FOUND IN CODE: src/gone.js:4]\n- F-001.3 It SHOULD be fast. verified by: manual step [FOUND IN CODE: src/index.js:99]\n- F-001.4 It MAY cache. verified by: manual step [ASSUMED: seems likely]\n- F-001.5 It MUST log. verified by: manual step\n';
+  const spec = '# x\n\n## F-001 Orders\n\nThe API lists orders. [FOUND IN CODE: src/index.js:1]\n\n## F-002 Untagged sentence\n\nNo tag here.\n\n- F-001.1 The API MUST list orders. verified by: test/orders.test.js [FOUND IN CODE: src/index.js:2-3] [observed]\n- F-001.2 It MUST not leak. verified by: manual step [FOUND IN CODE: src/gone.js:4]\n- F-001.3 It SHOULD be fast. verified by: manual step [FOUND IN CODE: src/index.js:99]\n- F-001.4 It MAY cache. verified by: manual step [ASSUMED: seems likely]\n- F-001.5 It MUST log. verified by: manual step\n';
   const dir = project({ ...NODE, 'docs/spec/SPEC.md': spec });
   const v = verifySpec(dir);
   assert.equal(v.tagged, 4); assert.equal(v.ok, 2); assert.deepEqual(v.broken.map(b => b.tag).sort(), ['src/gone.js:4', 'src/index.js:99']);
-  assert.equal(v.assumed, 1); assert.equal(v.untagged.length, 1); assert.match(v.untagged[0].text, /F-001\.5/);
+  assert.equal(v.assumed, 1); assert.deepEqual(v.untagged.map(u => u.text.split(' ').slice(0, 2).join(' ')), ['## F-002', '- F-001.5'], 'a heading is tagged by the sentence under it; the untagged ones are named');
   const r = spawnSync(process.execPath, [path.join(ROOT, 'tools/gs-start/gs-start.mjs'), '--verify-spec', '--root', dir], { encoding: 'utf8', env: ENV });
   assert.equal(r.status, 1); assert.match(r.stdout, /broken +docs\/spec\/SPEC\.md:\d+ +src\/gone\.js:4 +\(file not found\)/); assert.match(r.stdout, /does not check that the code does what the sentence says/);
   fs.writeFileSync(path.join(dir, 'docs/spec/SPEC.md'), spec.split('\n').filter(l => !/gone|99|F-001\.5/.test(l)).join('\n'));

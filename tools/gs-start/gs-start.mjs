@@ -392,7 +392,7 @@ export const SPEC_SECTIONS = [
 const RULES = [
   '**Never record a ratification, an acceptance or a decision on the person\'s behalf.** Do not run `gs decide add`, do not edit `docs/decisions.log.md`, do not change a decision record\'s Status to Accepted, do not add `Signed-off-by`. Ratifying is the person\'s act; you propose, they decide. Tell them which command is theirs.',
   '**Do not change production source code in this session.** You may write `docs/spec/SPEC.md`, `docs/open-questions.md` and, if the person asks, decision records and tests. Do not commit unless the person tells you to; if they do, use `type: what changed` and an `Assisted-by:` or `Co-Authored-By:` trailer.',
-  '**Do not invent.** Every statement in the spec ends with exactly one tag: `[FOUND IN CODE: path/to/file.ext:line]` (you read it there) or `[ASSUMED: why you think so]` (you did not see it). A criterion you found in code also carries `[observed]`, a tag the gs tools already know: derived from code, not yet ratified. Never tag a guess as FOUND IN CODE.',
+  '**Do not invent.** Every statement in the spec ends with exactly one tag (for a requirement, the one-sentence line under its heading; for a criterion, the end of its line): `[FOUND IN CODE: path/to/file.ext:line]` (you read it there) or `[ASSUMED: why you think so]` (you did not see it). A criterion you found in code also carries `[observed]`, a tag the gs tools already know: derived from code, not yet ratified. Never tag a guess as FOUND IN CODE.',
   '**Ask, do not decide.** Anything the code cannot tell you (intent, who it is for, what must never happen, which behaviour is a bug) goes to `docs/open-questions.md` as a line starting `OPEN:` and then to the person as a question. Never ask what you can read in the code or in `.gs/inventory.md`.',
   'Answer in the language the person writes to you in. Keep ids, tags and headings in English: programs read them.',
 ];
@@ -449,7 +449,7 @@ export function buildPrompt(inv) {
     L.push(`Write \`docs/spec/SPEC.md\` ${m === 'continue' ? '(edit the draft; never renumber an id)' : '(it holds only the placeholder that gs init wrote; replace the placeholder text, keep the file)'} with **all** of these sections, in this order:`, '');
     SPEC_SECTIONS.forEach((s, i) => L.push(`${i + 1}. ${s}`));
     L.push('');
-    L.push('Rules for the draft: one requirement per feature that exists, ids `F-001`, `F-002`, ... in the order you describe them; at least three criteria in total and at least as many as the floor in `docs/baseline.json` if that file exists; every requirement and every criterion ends with its tag (rule 3); a criterion whose test you did not find says `verified by: manual step (no test found)`. Do not write a criterion for behaviour you did not see' + (m === 'greenfield' ? ' (there is no code: every statement is `[ASSUMED: ...]` until the person answers)' : '') + '.', '');
+    L.push('Rules for the draft: one requirement per feature that exists, ids `F-001`, `F-002`, ... in the order you describe them; at least three criteria in total and at least as many as the floor in `docs/baseline.json` if that file exists; every requirement sentence and every criterion ends with its tag (rule 3); a criterion whose test you did not find says `verified by: manual step (no test found)`. Do not write a criterion for behaviour you did not see' + (m === 'greenfield' ? ' (there is no code: every statement is `[ASSUMED: ...]` until the person answers)' : '') + '.', '');
     L.push(`## Step ${m === 'greenfield' ? 3 : 4}. Write what you could not decide`, '');
     L.push('Append to `docs/open-questions.md` one line per unanswered point, each starting `OPEN:` and ending with the id of the requirement it blocks. (A line starting `OPEN:` blocks the gate at levels L1 and L2 until it is answered, which is the point.)', '');
     L.push(`## Step ${m === 'greenfield' ? 4 : 5}. Ask the questions`, '');
@@ -523,7 +523,10 @@ export function verifySpec(root) {
       }
       if (/\[ASSUMED/.test(l)) res.assumed++;
       if (/\[ANSWERED/.test(l)) res.answered++;
-      if (isStmt && !tags.length && !/\[(ASSUMED|ANSWERED)/.test(l)) res.untagged.push({ file: f, line: i + 1, text: l.trim().slice(0, 70) });
+      // a requirement heading is tagged when the sentence under it is (the first non-blank line after the heading)
+      const next = /^#{1,6} /.test(l) ? (lines.slice(i + 1).find(x => x.trim()) || '') : '';
+      const tagged = tags.length || /\[(ASSUMED|ANSWERED)/.test(l) || /\[(FOUND IN CODE|ASSUMED|ANSWERED)/.test(next);
+      if (isStmt && !tagged) res.untagged.push({ file: f, line: i + 1, text: l.trim().slice(0, 70) });
     });
   }
   return res;
