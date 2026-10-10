@@ -6,7 +6,7 @@
 // Status: design, installer tested on throwaway projects (tools/gs-init/test); not yet in a registered run. See README.md.
 //
 // Usage (in the project folder, the git top level):
-//   node gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--tools <folder>] [--no-proof | --proof-on-host] [--pubkey <file>] [--also AGENTS.md,CLAUDE.md,cursor] [--root <dir>] | --uninstall [--dry-run]
+//   node gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md|GEMINI.md|.github/copilot-instructions.md] [--tools <folder>] [--no-proof | --proof-on-host] [--pubkey <file>] [--also AGENTS.md,CLAUDE.md,GEMINI.md,.github/copilot-instructions.md,cursor] [--root <dir>] | --uninstall [--dry-run]
 //
 // The levels are the scale-adaptive depth (the practice notes at https://genspec.dev, the practice notes at https://genspec.dev):
 //   L0  the sentinel and three small documents (spec, decisions, open questions), and the trailer convention. Nothing runs by itself.
@@ -27,6 +27,8 @@ const VERSION = '0.1.0';
 const REPO_URL = 'https://github.com/pragma-works/genspec-tools';
 const MANIFEST = '.gs-manifest.json'; // the record of what this installer wrote, so that --uninstall removes only that
 const LEVELS = ['L0', 'L1', 'L2'];
+// the instruction files an assistant reads: the sentinel (full text) goes to one of the first four; every other one named gets a short pointer
+export const SENTINELS = ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', '.github/copilot-instructions.md'];
 const TOOL_FILES = {
   'gs-check': ['gs-check.mjs'],
   'gs-lock': ['gs-lock.mjs', 'gs-cochange.mjs', 'gs-redproof.mjs'],
@@ -57,8 +59,8 @@ export function parseArgs(argv) {
     else die(`unknown option ${k} (try --help)`);
   }
   if (!LEVELS.includes(a.level)) die(`--level must be L0, L1 or L2 (got ${a.level})`);
-  for (const x of a.also) if (!['CLAUDE.md', 'AGENTS.md', 'cursor'].includes(x)) die('--also takes CLAUDE.md, AGENTS.md or cursor (got ' + x + ')');
-  if (a.sentinel && !['CLAUDE.md', 'AGENTS.md'].includes(a.sentinel)) die('--sentinel must be CLAUDE.md or AGENTS.md');
+  for (const x of a.also) if (![...SENTINELS, 'cursor'].includes(x)) die('--also takes ' + SENTINELS.join(', ') + ' or cursor (got ' + x + ')');
+  if (a.sentinel && !SENTINELS.includes(a.sentinel)) die('--sentinel must be one of ' + SENTINELS.join(', '));
   return a;
 }
 
@@ -286,7 +288,7 @@ function pointerBlock(sentinel) {
   return [MD_BEGIN, '## Generative Specification', '', 'Read `' + sentinel + '` first: it says how work is done in this project and routes to the spec, the decisions and the open questions. This file only points there.', MD_END].join('\n');
 }
 
-const SPEC_MD = (name, adr) => `# ${name}: specification
+export const SPEC_MD = (name, adr) => `# ${name}: specification
 
 The source of truth for what this project does. Edit the spec first, then the tests, then the code. Ids are never renumbered or reused.
 The three lines below are placeholders that make the form valid; replace every one of them with something true about your project.
@@ -469,6 +471,8 @@ function chooseSentinel(a, root) {
   if (a.sentinel) return a.sentinel;
   if (exists(root, 'CLAUDE.md')) return 'CLAUDE.md';
   if (exists(root, 'AGENTS.md')) return 'AGENTS.md';
+  if (exists(root, 'GEMINI.md')) return 'GEMINI.md';
+  if (exists(root, '.github/copilot-instructions.md')) return '.github/copilot-instructions.md';
   return 'CLAUDE.md';
 }
 
