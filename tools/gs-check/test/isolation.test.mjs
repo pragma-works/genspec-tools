@@ -129,10 +129,11 @@ test('a malicious project is contained in the container: no canary on the host, 
 test('the network is off by default and the copy is read-only (a project cannot change the host copy)', { skip: !dockerUp && 'Docker with Linux containers is not running', timeout: 600000 }, () => {
   const dir = buildVariant(variants.find(x => x.id === 'R13'));
   try {
+    const st = () => spawnSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' }).stdout; const before = st(); // (on Linux the fixture's hooks show a file-mode change before anything runs)
     const c = cli(['--repo', dir, '--only', 'E01'], {});
     assert.match(c.stderr, /network none/);
     const n = cli(['--repo', dir, '--only', 'E01', '--allow-network'], {});
     assert.match(n.stderr, /network ALLOWED/);
-    assert.strictEqual(spawnSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' }).stdout.trim(), '', 'the original is untouched');
+    assert.strictEqual(st(), before, 'the original is untouched');
   } finally { cleanup(dir); }
 });
