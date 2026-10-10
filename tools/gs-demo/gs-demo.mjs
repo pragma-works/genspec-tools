@@ -63,8 +63,12 @@ const FIX = {
 };
 
 // ---------- small helpers ----------
+// The copy of the folder under examination carries its own .git/config. Git settings given through the environment win over it, so a config that names a
+// program to run (a file-system monitor, a pager, a signature checker, a hooks folder, an external diff, an ssh command) is switched off for every command here.
+const NO_REPO_CODE = Object.fromEntries([['core.fsmonitor', 'false'], ['core.hooksPath', os.devNull], ['core.pager', 'cat'], ['core.sshCommand', 'false'], ['core.editor', 'true'], ['log.showSignature', 'false'], ['gpg.program', 'false'], ['diff.external', ''], ['credential.helper', '']]
+  .flatMap(([k, v], i) => [['GIT_CONFIG_KEY_' + i, k], ['GIT_CONFIG_VALUE_' + i, v]]).concat([['GIT_CONFIG_COUNT', '9']]));
 const sh = (cmd, args, cwd, timeoutMs = 10000) => {
-  const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 24, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' } });
+  const r = spawnSync(cmd, args, { cwd, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 1 << 24, windowsHide: true, env: { ...process.env, ...NO_REPO_CODE, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' } });
   return { code: r.status === null ? -1 : r.status, out: (r.stdout || '') + (r.stderr || ''), stdout: r.stdout || '', timedOut: !!(r.error && r.error.code === 'ETIMEDOUT') };
 };
 const readText = p => { try { return fs.readFileSync(p, 'utf8').replace(/\r/g, '').replace(/^﻿/, ''); } catch { return null; } };
