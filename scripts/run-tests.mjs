@@ -14,7 +14,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2), quick = args.includes('--quick'), fast = args.includes('--fast'), words = args.filter(a => !a.startsWith('--'));
 // a heavy suite is skipped by file name, so a NEW test file anywhere still runs in the fast tier; an edit to a heavy suite is only caught by --quick, a full run and CI
 const HEAVY = /decide.test|signed.test|snapshot.test|init.test/;
-const SLOW = /smoke-cli.test|controls\.test|migration\.test|sync\.test|python-isolation\.test/;
+const SLOW = /smoke-cli.test|controls\.test|migration\.test|sync\.test|python-isolation\.test|check\/test\/isolation\.test|check\\test\\isolation\.test/;
 
 const suites = [];
 for (const dir of [...readdirSync(join(ROOT, 'tools')).sort().map(tool => join(ROOT, 'tools', tool, 'test')), join(ROOT, 'bin', 'test')]) {

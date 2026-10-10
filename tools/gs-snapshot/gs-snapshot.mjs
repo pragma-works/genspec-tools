@@ -178,7 +178,7 @@ export function checkerSection(root, o) {
     path = found.path; via = found.via;
     const tmp = mkdtempSync(join(tmpdir(), 'gs-snapshot-')), outFile = join(tmp, 'report.json');
     try {
-      const r = spawnSync(process.execPath, [path, '--repo', root, '--strict', '--out', outFile], { cwd: tmp, encoding: 'utf8', env: cleanEnv(), timeout: Number(o.checkTimeout || 1800) * 1000, maxBuffer: 1 << 27 });
+      const r = spawnSync(process.execPath, [path, '--repo', root, '--strict', '--out', outFile, ...(process.env.GS_CHECK_EXTRA_ARGS || '').split(/s+/).filter(Boolean)], { cwd: tmp, encoding: 'utf8', env: cleanEnv(), timeout: Number(o.checkTimeout || 1800) * 1000, maxBuffer: 1 << 27 });
       if (!existsSync(outFile)) return { status: 'ERROR', via, note: `gs-check produced no report (exit ${r.status}${r.error ? ', ' + r.error.code : ''}): ${((r.stderr || '') + (r.stdout || '')).trim().split('\n').slice(-3).join(' | ')}` };
       report = JSON.parse(readFileSync(outFile, 'utf8'));
     } finally { rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }); }

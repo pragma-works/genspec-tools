@@ -14,7 +14,9 @@
 //              fails (npm run check ...) is NOT credited, because nothing runs it unless a person does. Default mode credits scripts.
 //   --both     run both modes and print both columns (twice the time).
 // Exit: 0 = all twelve PASS, 1 = at least one item is not PASS, 2 = usage or fatal error.
-// The checker executes project code (install scripts, hooks, tests): run it on untrusted projects only inside a disposable container.
+// The checker executes project code (install scripts, hooks, tests). By default the CLI therefore runs ITSELF inside a throwaway Docker container
+// (no network unless --allow-network, read-only copy, non-root, limits, no host environment) and refuses without Docker; --run-on-host --i-trust-this-repo
+// is the deliberate way around it. The exported run() does no isolation: its caller is responsible.
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import fs0 from 'node:fs';
@@ -447,7 +449,9 @@ class Sandbox {
     if (!isPy) return false;
     const venv = path.join(this.dir, 'fx1venv');
     const vp = venv.split(path.sep).join("/");
-    const r = sh(`(command -v python3 >/dev/null 2>&1 && python3 -m venv "${vp}") || python -m venv "${vp}"`, { cwd: this.dir, timeout: 180000 });
+    // in the throwaway container the image's own pytest may be seen (the container is the isolation, and it may have no network); on a host the venv sees nothing of the machine
+    const sys = process.env.GS_CHECK_ISOLATION === 'container' ? '--system-site-packages ' : '';
+    const r = sh(`(command -v python3 >/dev/null 2>&1 && python3 -m venv ${sys}"${vp}") || python -m venv ${sys}"${vp}"`, { cwd: this.dir, timeout: 180000 });
     this.log.push({ step: 'python venv', code: r.code });
     if (r.code !== 0 || !exists(venv)) return false; // pip will then refuse to install (PIP_REQUIRE_VIRTUALENV), which is better than changing this machine
     setPythonVenv(venv);
@@ -1832,6 +1836,12 @@ function parseArgs(argv) {
     else if (argv[i] === '--sync') a.sync = true;
     else if (argv[i] === '--base') a.base = argv[++i];
     else if (argv[i] === '--mutants') a.mutants = +argv[++i];
+    else if (argv[i] === '--run-on-host') a.runOnHost = true;
+    else if (argv[i] === '--i-trust-this-repo') a.trust = true;
+    else if (argv[i] === '--allow-network') a.allowNetwork = true;
+    else if (argv[i] === '--time-limit') a.timeLimit = argv[++i];
+    else if (argv[i] === '--memory') a.memory = argv[++i];
+    else if (argv[i] === '--cpus') a.cpus = argv[++i];
   }
   return a;
 }
@@ -1843,7 +1853,7 @@ function run(repo, { configPath, only = null, keep = false, since = null, strict
   const started = new Date().toISOString();
   const head = git(absRepo, ['rev-parse', 'HEAD']);
   const report = {
-    checker: 'gs-check', checker_version: cfg.version, config_sha256: sha256(cfgText), mode: strict ? 'strict' : 'default',
+    checker: 'gs-check', checker_version: cfg.version, config_sha256: sha256(cfgText), mode: strict ? 'strict' : 'default', isolation: process.env.GS_CHECK_ISOLATION || 'library (no isolation: the caller chose it)',
     repo: absRepo, started, head: head.code === 0 ? head.stdout.trim() : null,
     env: { node: process.version, platform: process.platform, git: git(absRepo, ['--version']).stdout.trim() },
     items: []
@@ -1879,7 +1889,7 @@ function finish(report) {
   report.finished = new Date().toISOString();
   return report;
 }
-const USAGE = 'usage: node gs-check.mjs --repo <path> [--strict] [--both] [--verbose] [--migration] [--mutants N] [--sync --base <rev>] [--only E01,E05] [--since <rev>] [--config <file>] [--out <report.json>] [--keep] | --print-config';
+const USAGE = 'usage: node gs-check.mjs --repo <path> [--allow-network] [--time-limit MIN] [--memory 2g] [--cpus 2] [--run-on-host --i-trust-this-repo] [--strict] [--both] [--verbose] [--migration] [--mutants N] [--sync --base <rev>] [--only E01,E05] [--since <rev>] [--config <file>] [--out <report.json>] [--keep] | --print-config';
 function printReport(report, verbose) {
   console.log(`# gs-check ${report.checker_version} mode=${report.mode} repo=${report.repo} head=${report.head} node=${report.env.node} ${report.env.platform}`);
   for (const i of report.items) {
@@ -1908,12 +1918,110 @@ function smokeChild(ms, cwd, cmd) { // the README "run" commands (servers) are s
   child.on('exit', code => { clearTimeout(t); killTree(); process.stdout.write(out.slice(-4000)); process.exit(timed ? 124 : (code === null ? 1 : code)); });
   child.on('error', e => { process.stdout.write(String(e)); process.exit(1); });
 }
-module.exports = { run, parseArgs };
-module.exports.cli = function cli(argv) {
+// ---- isolation: gs-check runs the project's own installs, hooks and tests, so by default it does that in a throwaway container ----
+const IMAGE_DOCKERFILE = [
+  '# gs-check sandbox image: Node 22, python3 with pip and pytest, git, bash. Built on first use; the checker file itself is mounted, not copied.',
+  'FROM node:22',
+  'ENV PIP_BREAK_SYSTEM_PACKAGES=1',
+  'RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip python3-pytest python3-venv python-is-python3 bash git ca-certificates && rm -rf /var/lib/apt/lists/*',
+  'USER node',
+  ''
+].join('\n');
+const RED = s => (process.stderr.isTTY || process.env.FORCE_COLOR ? '\x1b[1;31m' + s + '\x1b[0m' : s);
+const say = s => process.stderr.write('gs-check: ' + s + '\n');
+function insideContainer() { if (process.env.GS_CHECK_PRETEND_HOST === '1') return false; return process.env.GS_CHECK_IN_CONTAINER === '1' || fs.existsSync('/.dockerenv') || fs.existsSync('/run/.containerenv'); }
+function dockerUp() { if (process.env.GS_CHECK_PRETEND_NO_DOCKER === '1') return false; const { spawnSync } = require('child_process'); const r = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], { encoding: 'utf8', timeout: 20000, windowsHide: true }); return r.status === 0 && !!(r.stdout || '').trim(); }
+function ensureImage() {
+  const { spawnSync } = require('child_process'); const tag = 'genspec-gs-check:' + sha256(IMAGE_DOCKERFILE).slice(0, 12);
+  if (spawnSync('docker', ['image', 'inspect', tag], { stdio: 'ignore', windowsHide: true }).status === 0) return tag;
+  say('building the sandbox image ' + tag + ' (once; it downloads Node and Python packages, so it needs the network this one time)...');
+  const b = spawnSync('docker', ['build', '-q', '-t', tag, '-'], { input: IMAGE_DOCKERFILE, encoding: 'utf8', timeout: 900000, windowsHide: true });
+  if (b.status !== 0) { say('the sandbox image could not be built:\n' + ((b.stderr || '') + (b.stdout || '')).slice(-1500)); return null; }
+  return tag;
+}
+const NO_DOCKER = repo => [
+  'I will not run this on your machine without a container, and I did not find a running Docker.',
+  'gs-check runs the project\'s own install steps, hooks and tests. On code you did not write, that is running a stranger\'s program with your permissions.',
+  'Two ways forward:',
+  '  1. Install Docker (https://docs.docker.com/get-docker/), start it, and run the same command again. Nothing else to change.',
+  '  2. If you wrote or fully trust ' + repo + ', run it on this machine on purpose:',
+  '       add  --run-on-host --i-trust-this-repo  (you will be asked to type the repository name; in CI set CI=true).'
+].join('\n');
+function confirmHost(repoAbs) {
+  const name = path.basename(repoAbs);
+  process.stderr.write(RED('\nWARNING: RUNNING ON THIS MACHINE, NOT IN A CONTAINER.') + '\n' + RED('gs-check will run the install steps, git hooks and tests of ' + repoAbs + ' with your user\'s permissions, your files and your environment variables (tokens included).') + '\n' + RED('If this repository is not yours or not trusted, stop now (Ctrl+C).') + '\n');
+  if (process.env.CI === 'true') { say('CI=true: continuing without a question.'); return true; }
+  process.stderr.write('To continue, type the repository name (' + name + ') and press Enter: ');
+  let line = ''; const b = Buffer.alloc(1);
+  try { for (;;) { const n = fs.readSync(0, b, 0, 1, null); if (n === 0 || b[0] === 10) break; if (b[0] !== 13) line += String.fromCharCode(b[0]); } } catch { /* no stdin */ }
+  if (line.trim() === name) return true;
+  say('the name did not match (or there was no one to ask), so nothing was run.'); return false;
+}
+// Rebuild the argument list for the checker inside the container: paths become container paths, host-only flags are dropped.
+function containerArgv(argv, cfgInside) {
+  const out = ['--repo', '/tmp/repo'];
+  for (let i = 0; i < argv.length; i++) {
+    const x = argv[i];
+    if (['--repo', '--out', '--config', '--time-limit', '--memory', '--cpus'].includes(x)) { i++; continue; }
+    if (['--keep', '--allow-network', '--run-on-host', '--i-trust-this-repo'].includes(x)) continue;
+    out.push(x);
+  }
+  if (cfgInside) out.push('--config', cfgInside);
+  out.push('--out', '/tmp/gs-report.json');
+  return out;
+}
+function runInContainer(a, argv) {
+  const { spawn, spawnSync } = require('child_process'); const os = require('os');
+  if (!dockerUp()) { console.error('gs-check: ' + NO_DOCKER(path.basename(path.resolve(a.repo)))); return Promise.resolve(2); }
+  const tag = ensureImage(); if (!tag) return Promise.resolve(2);
+  const repoAbs = path.resolve(a.repo), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-check-box-')), clone = path.join(tmp, 'src');
+  // the committed state only, as a fresh clone: no hooks, no .git/config, no uncommitted files of the original
+  const c = spawnSync('git', ['-c', 'core.autocrlf=false', '-c', 'filter.lfs.smudge=', '-c', 'filter.lfs.process=', '-c', 'filter.lfs.required=false', 'clone', '-q', '--no-local', '--no-hardlinks', repoAbs, clone], { encoding: 'utf8', windowsHide: true });
+  if (c.status !== 0) { fs.rmSync(tmp, { recursive: true, force: true }); console.error('gs-check: could not copy the repository (is it a git repository with a commit?): ' + (c.stderr || '').trim()); return Promise.resolve(2); }
+  const mins = Math.max(1, +(a.timeLimit || 60)), name = 'gs-check-' + process.pid + '-' + Date.now().toString(36);
+  const bind = (src, dst) => ['--mount', `type=bind,source=${src},target=${dst},readonly`];
+  const cfg = a.config ? bind(path.resolve(a.config), '/gs/config.json') : [];
+  const args = ['run', '--rm', '--name', name, '--pull', 'never',
+    '--network', a.allowNetwork ? 'bridge' : 'none',
+    '--read-only', '--tmpfs', '/tmp:rw,exec,nosuid,size=2g,mode=1777',
+    '--user', '1000:1000', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+    '--memory', a.memory || '2g', '--memory-swap', a.memory || '2g', '--cpus', String(a.cpus || 2), '--pids-limit', '512', '--ulimit', 'nofile=4096:4096',
+    '-e', 'HOME=/tmp/home', '-e', 'GS_CHECK_IN_CONTAINER=1', '-e', 'GS_CHECK_ISOLATION=container',
+    ...bind(clone, '/src'), ...bind(__file, '/gs/gs-check.mjs'), ...cfg, '-w', '/tmp', tag,
+    'sh', '-c', 'mkdir -p "$HOME" && cp -a /src /tmp/repo && timeout ' + (mins * 60) + ' node /gs/gs-check.mjs "$@"; c=$?; echo "@@GS_REPORT@@"; cat /tmp/gs-report.json 2>/dev/null; exit $c', 'gs-check', ...containerArgv(argv, a.config ? '/gs/config.json' : null)];
+  say(`isolation: container ${tag}; network ${a.allowNetwork ? 'ALLOWED (bridge)' : 'none'}; read-only copy of the committed state; non-root; ${a.memory || '2g'} memory, ${a.cpus || 2} cpus, 512 processes, ${mins} min; no host environment, no credentials, no home folder.`);
+  return new Promise(resolve => {
+    const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'inherit'], windowsHide: true });
+    let buf = '', rep = '', inRep = false;
+    const feed = line => { if (inRep) rep += line + '\n'; else if (line === '@@GS_REPORT@@') inRep = true; else process.stdout.write(line + '\n'); };
+    child.stdout.on('data', d => { buf += d; let k; while ((k = buf.indexOf('\n')) >= 0) { feed(buf.slice(0, k).replace(/\r$/, '')); buf = buf.slice(k + 1); } });
+    const kill = setTimeout(() => { say('time limit reached, stopping the container'); spawnSync('docker', ['rm', '-f', name], { stdio: 'ignore' }); }, (mins * 60 + 90) * 1000);
+    child.on('error', e => { clearTimeout(kill); say(String(e)); resolve(2); });
+    child.on('close', code => {
+      clearTimeout(kill); if (buf) feed(buf);
+      if (a.out && rep.trim()) { try { JSON.parse(rep); fs.writeFileSync(a.out, rep); } catch { say('the report from the container was not valid JSON; not written'); } }
+      fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 });
+      resolve(code === null ? 1 : code);
+    });
+  });
+}
+// Where may the project's code run? Returns 'container', 'host-trusted', 'already-in-container', or a number (exit code: refused).
+async function chooseIsolation(a, argv) {
+  if (insideContainer()) { process.env.GS_CHECK_ISOLATION = process.env.GS_CHECK_ISOLATION || 'already-in-container'; return 'inside'; }
+  if (a.runOnHost || a.trust) {
+    if (!(a.runOnHost && a.trust)) { console.error('gs-check: running on this machine needs BOTH flags, on purpose: --run-on-host --i-trust-this-repo. Nothing was run.'); return 2; }
+    if (!confirmHost(path.resolve(a.repo))) return 2;
+    process.env.GS_CHECK_ISOLATION = 'host-trusted'; return 'inside';
+  }
+  return runInContainer(a, argv);
+}
+module.exports = { run, parseArgs, containerArgv };
+module.exports.cli = async function cli(argv) {
   if (argv[0] === '--smoke-child') return smokeChild(argv[1], argv[2], argv[3]);
   if (argv.includes('--print-config')) { const text = JSON.stringify(DEFAULT_CONFIG, null, 2); console.log(text); console.error('config_sha256 ' + sha256(text)); return process.exit(0); }
   const a = parseArgs(argv);
   if (!a.repo) { console.error(USAGE); process.exit(2); }
+  const iso = await chooseIsolation(a, argv); if (iso !== 'inside') process.exit(iso);
   const opts = { configPath: a.config, only: a.only, keep: a.keep, since: a.since, mutants: a.mutants, base: a.base || a.since };
   const modes = a.both ? [false, true] : [a.strict];
   const reports = modes.map((strict, k) => run(a.repo, { ...opts, strict, migration: a.migration && k === modes.length - 1, sync: a.sync && k === modes.length - 1 }));

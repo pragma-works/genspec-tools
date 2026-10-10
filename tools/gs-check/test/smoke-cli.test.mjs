@@ -25,7 +25,7 @@ function verify(variantId) {
   const dir = buildVariant(v), outside = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-smoke-'));
   try {
     const reportFile = path.join(outside, 'report.json');
-    const run = () => spawnSync(process.execPath, [CLI, '--repo', dir, '--strict', '--verbose', '--out', reportFile], { cwd: outside, encoding: 'utf8', env, timeout: 900000, maxBuffer: 1 << 26 });
+    const run = () => spawnSync(process.execPath, [CLI, '--repo', dir, '--strict', '--verbose', '--out', reportFile, '--run-on-host', '--i-trust-this-repo'], { cwd: outside, encoding: 'utf8', env: { ...env, CI: 'true' }, timeout: 900000, maxBuffer: 1 << 26 });
     const r1 = run(), r2 = run();
     const status = r => Object.fromEntries([...r.stdout.matchAll(/^(E\d\d) (PASS|PARTIAL|ABSENT|UNDETERMINABLE)\b/gm)].map(m => [m[1], m[2]]));
     return { v, r1, r2, s1: status(r1), s2: status(r2), report: JSON.parse(fs.readFileSync(reportFile, 'utf8')), sha: crypto.createHash('sha256').update(fs.readFileSync(reportFile)).digest('hex') };

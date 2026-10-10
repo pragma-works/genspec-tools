@@ -236,7 +236,7 @@ const BUILDER = join(dirname(CHECK_JS), 'test', 'build-fixtures.mjs');
 test('S19 the real gs-check in strict mode on the known-good wired project: 12 of 12 PASS in the snapshot', { skip: !(existsSync(CHECK_JS) && existsSync(BUILDER)), timeout: 1500000 }, async () => {
   const { buildGood, cleanup } = await import(pathToFileURL(BUILDER).href); const dir = buildGood({ gs: true });
   try {
-    const r = spawnSync(process.execPath, [SNAP, '--root', dir, '--date', '2026-10-01', '--check', CHECK_JS, '--lock', join(dir, 'tools/gs-lock/gs-lock.mjs')], { encoding: 'utf8', env: env(), timeout: 1500000 });
+    const r = spawnSync(process.execPath, [SNAP, '--root', dir, '--date', '2026-10-01', '--check', CHECK_JS, '--lock', join(dir, 'tools/gs-lock/gs-lock.mjs')], { encoding: 'utf8', env: env({ CI: 'true', GS_CHECK_EXTRA_ARGS: '--run-on-host --i-trust-this-repo' }), timeout: 1500000 });
     assert.equal(r.status, 0, out(r)); const s = JSON.parse(readFileSync(join(dir, 'docs/snapshots/snapshot-2026-10-01.json'), 'utf8'));
     assert.equal(s.checker.status, 'RAN'); assert.equal(s.checker.mode, 'strict'); assert.equal(s.checker.summary.pass, 12, JSON.stringify(s.checker.items)); assert.match(s.line, /checker strict 12\/12 PASS/); assert.equal(s.lock.status, 'CURRENT');
   } finally { cleanup(dir); }

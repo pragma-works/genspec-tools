@@ -30,7 +30,7 @@ test('a shallow clone: the push-stage probe says UNDETERMINABLE and names the sh
     const c = g(base, 'clone', '-q', '--depth', '1', pathToFileURL(full).href, shallow);
     assert.strictEqual(c.status, 0, c.stderr);
     assert.match(g(shallow, 'rev-parse', '--is-shallow-repository').stdout, /true/);
-    const r = spawnSync(process.execPath, [CHECK, '--repo', shallow, '--strict', '--only', 'E05'], { encoding: 'utf8', timeout: 240000, env: clean });
+    const r = spawnSync(process.execPath, [CHECK, '--repo', shallow, '--strict', '--only', 'E05', '--run-on-host', '--i-trust-this-repo'], { encoding: 'utf8', timeout: 240000, env: { ...clean, CI: 'true' } });
     const out = r.stdout + r.stderr;
     assert.match(out, /E05 UNDETERMINABLE/, out);
     assert.match(out, /shallow clone/);

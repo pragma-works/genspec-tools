@@ -24,7 +24,7 @@ test('a Readme.md project with tests and no hook: the baseline commit is not rep
   try {
     g('init', '-q', '-b', 'main'); g('add', '-A');
     g('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'feat: tiny project');
-    const r = spawnSync(process.execPath, [CHECK, '--repo', dir, '--strict', '--only', 'E05'], { encoding: 'utf8', timeout: 240000 });
+    const r = spawnSync(process.execPath, [CHECK, '--repo', dir, '--strict', '--only', 'E05', '--run-on-host', '--i-trust-this-repo'], { encoding: 'utf8', timeout: 240000, env: { ...process.env, CI: 'true' } });
     const out = r.stdout + r.stderr;
     assert.ok(!/baseline block|clean docs-only commit is blocked/.test(out), out);
     assert.match(out, /E05 /);
