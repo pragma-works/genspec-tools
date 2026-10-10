@@ -6,7 +6,7 @@ One file, `gs-init.mjs`. Node 18+, no dependencies, no model, no network. MIT (s
 
 ```
 cd your-project            # the top folder of a git repository (it runs git init if there is none)
-node path/to/gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--also AGENTS.md,CLAUDE.md,cursor] [--tools <folder>] [--no-proof] [--pubkey <file>] [--verbose]
+node path/to/gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--also AGENTS.md,CLAUDE.md,cursor] [--tools <folder>] [--no-proof | --proof-on-host] [--pubkey <file>] [--verbose]
 node path/to/gs-init.mjs --uninstall [--dry-run]
 ```
 
@@ -52,7 +52,7 @@ The installer copies `gs-check` (1 file), `gs-lock` (3 files) and `gs-decide` (4
 
 ## The proof
 
-Unless `--no-proof` or `--dry-run`, it copies your working tree to a temporary folder, makes one commit there, and runs `gs-check --strict` on it (`gs-check` reads only committed state; your repository is not touched). It prints the twelve items and checks the ones this level claims:
+Unless `--no-proof` or `--dry-run`, it copies your working tree to a temporary folder, makes one commit there, and runs `gs-check --strict` on it (`gs-check` reads only committed state; your repository is not touched). gs-check runs your project's own tests and install steps, so the proof runs in gs-check's throwaway container; without Docker the proof is skipped in plain words. `--proof-on-host` runs it on this machine instead, for your own project only (it asks you to type the folder name unless CI=true). It prints the twelve items and checks the ones this level claims:
 
 | Level | Claimed (must read PASS) | Reads absent or partial on purpose |
 |---|---|---|

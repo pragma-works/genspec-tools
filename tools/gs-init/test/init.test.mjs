@@ -339,10 +339,13 @@ test('G17 L2 with --pubkey writes the roles file and turns signing on (skipped w
   assert.notEqual(add.status, 0); assert.match(add.stderr + add.stdout, /requireSigned/);
 });
 
+// the proof runs gs-check, which by default needs Docker with Linux containers; without it the proof is skipped, so these tests ask for the host proof (CI=true, our own throwaway projects)
+const dockerUp = (() => { const r = spawnSync('docker', ['info', '--format', '{{.OSType}}'], { encoding: 'utf8', timeout: 20000 }); return r.status === 0 && /linux/.test(r.stdout); })();
+const proofArgs = dockerUp ? [] : ['--proof-on-host'], proofEnv = { ...process.env, CI: 'true' };
 const skipProof = process.env.GS_INIT_SKIP_PROOF ? 'GS_INIT_SKIP_PROOF set' : false;
 test('P1 proof at L1 on a node project: the installer runs gs-check --strict on a copy and its claimed items read PASS', { skip: skipProof, timeout: 600000 }, () => {
   const dir = project(NODE_PROJECT);
-  const r = spawnSync(process.execPath, [INIT, '--tools', VENDOR, '--level', 'L1'], { cwd: dir, encoding: 'utf8', timeout: 600000 });
+  const r = spawnSync(process.execPath, [INIT, '--tools', VENDOR, '--level', 'L1', ...proofArgs], { cwd: dir, encoding: 'utf8', timeout: 600000, env: dockerUp ? process.env : proofEnv });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /claimed at L1: E01 E02 E03 E06 E07 -> all PASS/);
   assert.match(r.stdout, /E10 ABSENT/);
@@ -351,8 +354,16 @@ test('P1 proof at L1 on a node project: the installer runs gs-check --strict on 
 
 test('P2 proof at L0 on a python project: the three claimed items pass; the gate items read absent on purpose', { skip: skipProof, timeout: 600000 }, () => {
   const dir = project(PY_PROJECT);
-  const r = spawnSync(process.execPath, [INIT, '--tools', VENDOR, '--level', 'L0'], { cwd: dir, encoding: 'utf8', timeout: 600000 });
+  const r = spawnSync(process.execPath, [INIT, '--tools', VENDOR, '--level', 'L0', ...proofArgs], { cwd: dir, encoding: 'utf8', timeout: 600000, env: dockerUp ? process.env : proofEnv });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /claimed at L0: E01 E02 E03 -> all PASS/);
   assert.match(r.stdout, /E07 (ABSENT|PARTIAL)/);
+});
+
+// F-008.8
+test('P3 without Docker and without --proof-on-host the proof is skipped in plain words and nothing runs on this machine', () => {
+  const dir = project(NODE_PROJECT);
+  const r = spawnSync(process.execPath, [INIT, '--tools', VENDOR, '--level', 'L0'], { cwd: dir, encoding: 'utf8', timeout: 300000, env: { ...process.env, GS_CHECK_PRETEND_NO_DOCKER: '1', GS_CHECK_PRETEND_HOST: '1' } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /Proof: skipped./); assert.match(r.stdout, /Install Docker/); assert.match(r.stdout, /--proof-on-host/); assert.ok(!/claimed at L0/.test(r.stdout));
 });

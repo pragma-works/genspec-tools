@@ -6,7 +6,7 @@
 // Status: design, installer tested on throwaway projects (tools/gs-init/test); not yet in a registered run. See README.md.
 //
 // Usage (in the project folder, the git top level):
-//   node gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--tools <folder>] [--no-proof] [--pubkey <file>] [--also AGENTS.md,CLAUDE.md,cursor] [--root <dir>] | --uninstall [--dry-run]
+//   node gs-init.mjs [--level L0|L1|L2] [--dry-run] [--sentinel CLAUDE.md|AGENTS.md] [--tools <folder>] [--no-proof | --proof-on-host] [--pubkey <file>] [--also AGENTS.md,CLAUDE.md,cursor] [--root <dir>] | --uninstall [--dry-run]
 //
 // The levels are the scale-adaptive depth (the practice notes at https://genspec.dev, the practice notes at https://genspec.dev):
 //   L0  the sentinel and three small documents (spec, decisions, open questions), and the trailer convention. Nothing runs by itself.
@@ -47,6 +47,7 @@ export function parseArgs(argv) {
     else if (k === '--sentinel') a.sentinel = v();
     else if (k === '--tools') a.tools = path.resolve(v());
     else if (k === '--no-proof') a.proof = false;
+    else if (k === '--proof-on-host') a.proofOnHost = true;
     else if (k === '--verbose') a.verbose = true;
     else if (k === '--pubkey') a.pubkey = path.resolve(v());
     else if (k === '--also') a.also = v().split(',').map(x => x.trim()).filter(Boolean);
@@ -708,7 +709,10 @@ function copyTree(root, dest) {
   return files.length;
 }
 
-export function proof(root, level, checker, timeoutMs = 900000, verbose = false) {
+// The proof runs gs-check, which executes the project's own install steps, hooks and tests. Default: gs-check's throwaway container. With Docker missing the proof is
+// SKIPPED (not run on the host). `--proof-on-host` is the deliberate choice of someone who is checking their OWN project: the installer asks for the project's folder name
+// (not needed when CI=true), then hands gs-check both host flags. That is why the proof is on a user's own copy by design only when asked for.
+export function proof(root, level, checker, timeoutMs = 900000, verbose = false, onHost = false) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'gs-init-proof-'));
   try {
     copyTree(root, tmp);
@@ -716,7 +720,7 @@ export function proof(root, level, checker, timeoutMs = 900000, verbose = false)
     g(['init', '-q']); g(['add', '-A']);
     for (const f of g(['ls-files']).stdout.split('\n')) if (/(^|\/)(\.githooks|\.husky|hooks)\/[^/]+$/.test(f) || /\.mjs$/.test(f)) g(['update-index', '--chmod=+x', f]);
     g(['commit', '-q', '--no-verify', '-m', 'chore: gs-init proof copy']);
-    const r = spawnSync(process.execPath, [checker, '--repo', tmp, '--strict', ...(verbose ? ['--verbose'] : [])], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
+    const r = spawnSync(process.execPath, [checker, '--repo', tmp, '--strict', ...(verbose ? ['--verbose'] : []), ...(onHost ? ['--run-on-host', '--i-trust-this-repo'] : [])], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, env: onHost ? { ...process.env, CI: 'true' } : process.env });
     const text = (r.stdout || '') + (r.stderr || '');
     const items = {};
     for (const l of text.split('\n')) { const m = l.match(/^(E\d{2})\s+(PASS|PARTIAL|ABSENT|UNDETERMINABLE)\b/); if (m && !items[m[1]]) items[m[1]] = m[2]; }
@@ -773,19 +777,31 @@ export async function main(argv) {
   if (a.dryRun) out('Proof: skipped in a dry run.');
   else if (!a.proof) out('Proof: skipped (--no-proof).');
   else if (!checker) out(`Proof: skipped, gs-check was not found. Fetch tools/gs-check from ${REPO_URL} and run: node tools/gs-check/gs-check.mjs --repo . --strict (it reads committed state only, so commit first).`);
-  else if (res.level === 'L0' && false) { /* L0 is proved too, when gs-check is present */ }
   else {
-    out('Proof: gs-check --strict on a copy of your working tree (it reads only committed state; your repository is not touched). This takes a minute or two.');
-    pr = proof(a.root, a.level, checker, 900000, a.verbose);
-    if (a.verbose) out(pr.text);
-    const claimed = CLAIMED[a.level];
-    const order = Object.keys(pr.items).sort();
-    out('  ' + (order.map(k => `${k} ${pr.items[k]}`).join('  ') || '(no item lines read from gs-check; exit ' + pr.status + ')'));
-    const bad = claimed.filter(k => pr.items[k] !== 'PASS');
-    out(`  claimed at ${a.level}: ${claimed.join(' ')} -> ${bad.length ? 'NOT PASSING: ' + bad.join(' ') : 'all PASS'}`);
-    const rest = order.filter(k => pr.items[k] !== 'PASS' && !claimed.includes(k));
-    if (rest.length) out(`  not claimed at ${a.level} (so they read ${[...new Set(rest.map(k => pr.items[k]))].join('/')} on purpose): ${rest.join(' ')}. E10 and E11 (lock, co-change) are day 7 to 30; E09 needs 4 commits of history; E05 needs 5 tests and a CI file; E04 and E08 (architecture, coverage) are yours to write.`);
-    if (bad.length) { out('  The installer could not prove its own claim. Read the raw lines above with: node tools/gs-check/gs-check.mjs --repo <a committed copy> --strict --verbose'); code = 1; }
+    let go = true;
+    if (a.proofOnHost && process.env.CI !== 'true') {
+      const name = path.basename(path.resolve(a.root));
+      process.stderr.write('\x1b[1;31mWARNING: the proof will run your project\'s own install steps and tests ON THIS MACHINE, not in a container.\x1b[0m\nOnly continue if ' + a.root + ' is your own work. Type the folder name (' + name + ') to go on: ');
+      let line = ''; const b = Buffer.alloc(1);
+      try { for (;;) { const n = fs.readSync(0, b, 0, 1, null); if (n === 0 || b[0] === 10) break; if (b[0] !== 13) line += String.fromCharCode(b[0]); } } catch { /* no stdin */ }
+      if (line.trim() !== name) { out('Proof: skipped (the folder name was not typed, so nothing was run on this machine).'); go = false; }
+    }
+    if (go) {
+      out(a.proofOnHost ? 'Proof: gs-check --strict on a copy of your working tree, ON THIS MACHINE as you asked (it reads only committed state; your repository is not touched). This takes a minute or two.' : 'Proof: gs-check --strict on a copy of your working tree, inside a throwaway container (it reads only committed state; your repository is not touched). This takes a minute or two.');
+      pr = proof(a.root, a.level, checker, 900000, a.verbose, !!a.proofOnHost);
+      if (pr.status === 2 && !Object.keys(pr.items).length) { out('Proof: skipped. ' + pr.text.trim().split('\n').join('\n  ')); out('  (To run it on this machine instead, only if the project is your own: gs-init --proof-on-host)'); pr = null; }
+    }
+    if (pr) {
+      if (a.verbose) out(pr.text);
+      const claimed = CLAIMED[a.level];
+      const order = Object.keys(pr.items).sort();
+      out('  ' + (order.map(k => `${k} ${pr.items[k]}`).join('  ') || '(no item lines read from gs-check; exit ' + pr.status + ')'));
+      const bad = claimed.filter(k => pr.items[k] !== 'PASS');
+      out(`  claimed at ${a.level}: ${claimed.join(' ')} -> ${bad.length ? 'NOT PASSING: ' + bad.join(' ') : 'all PASS'}`);
+      const rest = order.filter(k => pr.items[k] !== 'PASS' && !claimed.includes(k));
+      if (rest.length) out(`  not claimed at ${a.level} (so they read ${[...new Set(rest.map(k => pr.items[k]))].join('/')} on purpose): ${rest.join(' ')}. E10 and E11 (lock, co-change) are day 7 to 30; E09 needs 4 commits of history; E05 needs 5 tests and a CI file; E04 and E08 (architecture, coverage) are yours to write.`);
+      if (bad.length) { out('  The installer could not prove its own claim. Read the raw lines above with: node tools/gs-check/gs-check.mjs --repo <a committed copy> --strict --verbose'); code = 1; }
+    }
   }
   out('');
   for (const l of plain(a.level, res, pr)) out(l);
