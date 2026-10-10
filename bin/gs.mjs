@@ -73,7 +73,10 @@ Set up and keep up:
   gs doctor             what is installed here, and what is missing
 
 Use:
-  gs check              the full test (minutes): plants a mistake in a copy and sees whether your checks refuse it
+  gs check              the full test (minutes): plants a mistake in a copy and sees whether your checks refuse it.
+                        It runs your project's own installs and tests, so by default it does that in a throwaway Docker container.
+      --allow-network     let the container download packages (default: no network at all)
+      --run-on-host --i-trust-this-repo   run on this machine instead (only for code you trust; you type the folder name)
   gs lock | gs decide | gs snapshot    the other tools, with their usual options
 
 More: ${REPO_URL}`;
@@ -171,7 +174,8 @@ function cmdCheck(args) {
   needGit();
   if (!args.includes('--repo')) args = ['--repo', cwd(), '--strict', ...args];
   say('the full check copies your last commit to a temporary folder, plants mistakes there and sees whether your checks refuse them.');
-  say('it runs your project\'s own code (installs, tests): use it on work you trust. Changes you have not committed are not seen. It takes minutes.');
+  say('it runs your project\'s own installs, hooks and tests, so by default it does that inside a throwaway Docker container (no network, a read-only copy, none of your files or secrets). Changes you have not committed are not seen. It takes minutes.');
+  say('without Docker it refuses. For code you wrote or fully trust you can run it here on purpose: gs check --run-on-host --i-trust-this-repo. If the project must download packages: gs check --allow-network.');
   return run(TOOL('gs-check'), args);
 }
 
