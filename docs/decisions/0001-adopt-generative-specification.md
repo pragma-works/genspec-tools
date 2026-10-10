@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. Written by gs-init. The person who owns the project accepts it by changing this line to Accepted in a commit under their own name.
+Accepted by JC, who said so in chat on 2026-10-09. The assistant recorded it at his instruction as agent-recorded entry D-0001 in docs/decisions.log.md, which the log itself flags as needing a person to confirm. JC can countersign by adding his own entry or by changing this paragraph in a commit he makes himself.
 
 ## Date
 
