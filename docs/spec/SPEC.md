@@ -110,3 +110,24 @@ Why it is built this way: docs/decisions/0001-adopt-generative-specification.md.
 - F-008.6 The container MUST start with no network unless  is given, MUST say which it did, and MUST leave the original repository untouched. verified by: tools/gs-check/test/isolation.test.mjs
 - F-008.7 , directly and through the front door, MUST execute nothing from the target: a project with canaries in its package scripts, hooks, its own lock tool, a gate script and the programs named in its  MUST fire none, while a control shows the git-config canary is live. verified by: tools/gs-demo/test/no-execution.test.mjs
 - F-008.8 The proof of  MUST run in the container, or be skipped in plain words when Docker is missing; running it on the host MUST need  and a typed folder name unless CI=true. verified by: tools/gs-init/test/init.test.mjs
+
+## F-009 gs start reads the project with a program and hands the judgement to the person's assistant
+
+`gs start` splits the work. A program reads the facts (`.gs/inventory.json`, `.gs/inventory.md`) and writes a prompt (`.gs/start-prompt.md`); the person's own assistant, started by the person, reads the code for intent, drafts a spec proposal and asks the questions; the person ratifies. gs starts no assistant unless `--launch` is given, and the proposal's quality depends on the model, which no test here exercises.
+
+### Acceptance criteria
+
+- F-009.1 The inventory MUST report, for node, python, go and dotnet projects, without a model and without running any code of the project, the package manager, the test commands found, the entry points, the routes and command names that a pattern finds, and the dependencies; two reads of the same state MUST give the same bytes. verified by: tools/gs-start/test/start.test.mjs
+- F-009.2 A folder that is mostly not code MUST get the note "this is mostly not code, it needs a different profile", and `gs start` MUST write nothing in it: no spec, no prompt, no inventory. verified by: tools/gs-start/test/start.test.mjs
+- F-009.3 The prompt MUST name every heading of the spec template that `gs-init` writes (read from the template itself), the sections of a spec proposal, the two tags FOUND IN CODE and ASSUMED, the questions each with a recommended answer, and the steps in the order read, explore, draft, ask, update, stop, check. verified by: tools/gs-start/test/start.test.mjs
+- F-009.4 The prompt MUST forbid the assistant to record a ratification, an acceptance or a signature, every mention of the commands that record one MUST be a prohibition or be addressed to the person, and the stop for the person's ratification MUST come before `gs check`. verified by: tools/gs-start/test/start.test.mjs
+- F-009.5 The prompt MUST follow the folder: an empty one asks for the intent first, a complete spec gets verify and sync, a draft spec is continued, and the placeholder spec that `gs-init` writes MUST NOT count as a spec. verified by: tools/gs-start/test/start.test.mjs
+- F-009.6 A second `gs start` MUST change nothing and make no backup; a changed project MUST rewrite the derived files; a derived file the person edited MUST be copied to the backup folder first; `gs uninstall` MUST remove the files `gs start` wrote; `--dry-run` MUST write nothing. verified by: tools/gs-start/test/start.test.mjs
+- F-009.7 Only the assistant CLIs found on the PATH MUST be offered, each with the command whose flags were read from that CLI's own `--help`; with none found, the generic instruction MUST be printed; no assistant MUST be started unless `--launch <cli>` is given; an unknown or missing CLI MUST be refused with exit 2 before anything is written. verified by: tools/gs-start/test/start.test.mjs
+- F-009.8 `--assistant` MUST choose the instruction file written (CLAUDE.md, .github/copilot-instructions.md, AGENTS.md, GEMINI.md, .cursor/rules, or only the neutral AGENTS.md for none), several may be given, and an unknown name MUST be refused with exit 2 and nothing written. verified by: bin/test/gs.test.mjs
+- F-009.9 `gs start --verify-spec` MUST report a FOUND IN CODE tag whose file or line does not exist (exit 1), MUST report requirement and criterion lines that carry no tag, and MUST say that it does not check that the code does what the sentence says. verified by: tools/gs-start/test/start.test.mjs
+- F-009.10 Reading a project MUST start nothing of the project's: a package script and a git setting that names a program MUST NOT run. verified by: tools/gs-start/test/start.test.mjs
+
+### Decisions
+
+Why it is built this way: docs/decisions/0001-adopt-generative-specification.md.
