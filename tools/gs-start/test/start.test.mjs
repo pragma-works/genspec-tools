@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { inventory, buildPrompt, renderInventoryMd, writeHandoff, detectClis, handCommand, verifySpec, specState, CLI_START, INTRO, GENERIC, DOCUMENTS_NOTE, PROMPT_FILE } from '../gs-start.mjs';
+import { CORE_CLIS, CLIS, inventory, buildPrompt, renderInventoryMd, writeHandoff, detectClis, handCommand, verifySpec, specState, CLI_START, INTRO, GENERIC, DOCUMENTS_NOTE, PROMPT_FILE } from '../gs-start.mjs';
 import { SPEC_MD } from '../../gs-init/gs-init.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -139,9 +139,10 @@ test('S3 the prompt contains every section of the spec template that gs-init wri
   for (const h of headings) assert.ok(p.includes(h.replace(/^(F-001) .*/, '$1')), 'the prompt names the template heading: ' + h);
   for (const s of ['overview', 'Scope', 'Non-goals', 'The AI must never', 'Acceptance criteria', 'Decisions', 'verified by:', 'MUST, SHOULD or MAY', 'F-001.1']) assert.ok(p.includes(s), s);
   for (const s of ['FOUND IN CODE', 'ASSUMED', 'docs/open-questions.md', 'OPEN:', '**Recommended:**', 'Reply `ok`', 'one at a time', 'gs check', '.gs/inventory.md']) assert.ok(p.includes(s), s);
-  const order = ['Step 1. Read', 'Step 2. Explore', 'Step 3. Draft', 'Step 4. Write what', 'Step 5. Ask', 'Step 6. Update', 'Step 7. Stop', 'Step 8. Check'].map(s => p.indexOf(s));
+  const titles = ['Read', 'Explore', 'Draft the spec', 'Write what you could not decide', 'Create the sentinel', 'Mark the technical debt', 'Ask the questions', 'Ask what the person WANTS', 'Configure the substrate', 'Update the spec', 'Stop and hand over', 'Check the sync'];
+  const order = titles.map(t => p.search(new RegExp('^## Step \\d+\\. ' + t, 'm')));
   assert.ok(order.every((x, i) => x >= 0 && (i === 0 || x > order[i - 1])), 'steps in order: ' + order);
-  assert.ok(p.indexOf('Step 7. Stop') < p.indexOf('gs check\n```'), 'gs check comes after the stop');
+  assert.ok(order[10] < p.indexOf('gs check\n```'), 'gs check comes after the stop');
 });
 
 // F-009.4
@@ -236,7 +237,7 @@ test('S8 --launch starts only the assistant named, with the prompt as its first 
   const m = gs(bad, ['start', '--yes', '--no-proof', '--launch', 'gemini'], { PATH: pathWith(fake), Path: undefined });
   assert.equal(m.status, 2); assert.match(m.stderr, /gemini was not found on your PATH/); assert.deepEqual(tree(bad), before);
   const u = gs(bad, ['start', '--yes', '--no-proof', '--launch', 'emacs']);
-  assert.equal(u.status, 2); assert.match(u.stderr, /--launch takes claude, copilot, codex, gemini/); assert.deepEqual(tree(bad), before);
+  assert.equal(u.status, 2); assert.match(u.stderr, /--launch takes claude, codex, copilot, gemini/); assert.deepEqual(tree(bad), before);
 });
 
 // F-009.9
@@ -263,4 +264,42 @@ test('S11 reading a project starts nothing of its own: a package script and a gi
   assert.equal(r.status, 0, r.stderr);
   assert.ok(!fs.existsSync(canary), 'nothing of the project ran');
   assert.ok(inventory(dir).git.commits >= 1);
+});
+
+// F-009.11
+const DOC_LINES = Array.from({ length: 14 }, (_, i) => `Line ${i + 1} of the manual: the orders service lists orders.`).join('\n');
+const WITHDOCS = { ...NODE, 'README.md': '# orders\n\n' + DOC_LINES + '\n', 'docs/adr/0001-use-express.md': '# Use Express\n', 'TODO.md': '- fix paging\n', 'ROADMAP.md': '- v2\n', 'src/util.js': '// TODO: remove\n// FIXME: leaks\nmodule.exports = 1;\n' };
+test('S12 the inventory detects existing documentation, decision records, backlog files and the TODO and FIXME markers; a bare README is not documentation', () => {
+  const inv = inventory(project(WITHDOCS));
+  assert.equal(inv.docs.existing, true);
+  assert.ok(inv.docs.decisionRecords.includes('docs/adr/0001-use-express.md'));
+  assert.deepEqual(inv.docs.trackerFiles.sort(), ['ROADMAP.md', 'TODO.md']);
+  assert.equal(inv.debt.markers, 2); assert.equal(inv.debt.files[0].file, 'src/util.js');
+  const md = renderInventoryMd(inv);
+  assert.match(md, /Existing documentation: YES/); assert.match(md, /Debt markers in source .*: 2/);
+  const bare = inventory(project(NODE));
+  assert.equal(bare.docs.existing, false); assert.equal(bare.debt.markers, 0);
+  const d2 = project(WITHDOCS); assert.equal(JSON.stringify(inventory(d2)), JSON.stringify(inventory(d2)), 'same state, same bytes');
+});
+
+// F-009.11
+test('S13 with existing docs the prompt makes the assistant compare, write the sentinel from findings, mark debt, ask for the roadmap and configure the substrate as-is, in four separate artifacts, and never ratify', () => {
+  const p = buildPrompt(inventory(project(WITHDOCS)));
+  for (const s of ['docs/discrepancies.md', 'DISCREPANCY', 'doc says', 'code does', 'path:line', 'docs/tech-debt.md', 'severity guess', 'ASK the person whether a tech-debt list already exists', 'TODO.md', 'docs/roadmap.md', 'WISHED-FOR', 'separate', 'the sentinel from what you FOUND', 'not from a template', 'reflect what exists today', 'Status: Proposed', 'normalizing or changing it later is allowed and expected', 'proposal for the person to ratify', 'Keep the four artifacts apart']) assert.ok(p.includes(s), s);
+  assert.match(p, /never add them to `docs\/decisions\.log\.md`/); assert.match(p, /You never ratify these records/);
+  assert.match(p, /Recommended/);
+  for (const line of p.split('\n').filter(l => /gs decide|Signed-off-by|Status to Accepted|docs\/decisions\.log|ratif/i.test(l))) assert.match(line, /\bnot\b|\bNever\b|never|person|yourself|your own name/i, line.slice(0, 120));
+  assert.ok(!/(^|\. )(Run|Use|Record|Add) [^.]*gs decide add/m.test(p.replace(/(do not|never|the person)[^.]*gs decide add/gi, '')), 'no instruction to run gs decide add');
+  const plain = buildPrompt(inventory(project(NODE)));
+  assert.ok(!/## Step d+. Compare the existing documentation/.test(plain), 'no docs, nothing to compare');
+  assert.ok(plain.includes('docs/tech-debt.md') && plain.includes('docs/roadmap.md'), 'debt and roadmap steps apply to any existing code');
+  assert.ok(!/## Step d+. (Ask what the person WANTS|Mark the technical debt)/.test(buildPrompt(inventory(project({})))), 'greenfield asks the intent, no adoption steps');
+});
+
+// F-009.12
+test('S14 the three most used assistant CLIs are core, in order, with launch commands; a fourth is a marked second tier', () => {
+  assert.deepEqual(CORE_CLIS, ['claude', 'codex', 'copilot']);
+  assert.deepEqual(CLIS.slice(0, 3), CORE_CLIS); assert.equal(CLIS.length, 4);
+  for (const c of CLIS) assert.ok(CLI_START[c] && /--help|:/.test(CLI_START[c].note), c);
+  assert.deepEqual(CLI_START.codex.args('x'), ['x']); assert.deepEqual(CLI_START.copilot.args('x'), ['-i', 'x']);
 });

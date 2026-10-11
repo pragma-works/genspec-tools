@@ -24,7 +24,11 @@ import { fileURLToPath } from 'node:url';
 import { SPEC_MD } from '../gs-init/gs-init.mjs';
 
 const MANIFEST = '.gs-manifest.json';
-export const CLIS = ['claude', 'copilot', 'codex', 'gemini'];
+// Order = usage evidence, 2026-10-10 (JetBrains Developer Ecosystem 2026, work use: Claude Code 39%, GitHub Copilot 21%, Codex 16%; npm weekly downloads and
+// GitHub stars in the soma report gs-start-handoff-2026-10-09.md, section "Refinement 2026-10-10"). The first three are CORE: supported first, flags verified.
+// Gemini CLI stays supported (flags read from its own --help) as a second tier: it is not close to the third in usage.
+export const CORE_CLIS = ['claude', 'codex', 'copilot'];
+export const CLIS = [...CORE_CLIS, 'gemini'];
 // The only flags used, each read from that CLI's own --help on 2026-10-09 (claude 2.1.293 on this machine; copilot 1.0.95, codex 0.162.1 and
 // gemini 0.63.0 installed in a node:22 container). A CLI whose flag could not be read is not in this table and gets the generic instruction.
 export const CLI_START = {
@@ -302,6 +306,14 @@ export function inventory(root) {
     specTools: ['.specify', 'openspec', '_bmad', '.bmad-core'].filter(d => files.some(f => f.startsWith(d + '/'))),
     otherSpecFiles: files.filter(f => /^(specs?|requirements)\/.+\.md$/i.test(f) || /(^|\/)(PRD|SPEC|REQUIREMENTS)\.md$/i.test(f)).slice(0, 20),
   };
+  const trackerRx = /(^|\/)(TODO|BACKLOG|ROADMAP|KNOWN[_-]?ISSUES|ISSUES|CHANGELOG|HISTORY)(\.[a-z]+)?$/i;
+  docs.trackerFiles = files.filter(f => trackerRx.test(f) || /^\.github\/ISSUE_TEMPLATE(\/|\.md$)/.test(f) || /^docs\/(roadmap|backlog|todo)/i.test(f) || /(^|\/)wiki\//i.test(f)).slice(0, 20);
+  docs.readmeLines = docs.readme ? (readText(root, docs.readme) || '').split('\n').filter(l => l.trim()).length : 0;
+  const notDoc = f => trackerRx.test(f) || /^(CLAUDE|AGENTS|GEMINI)\.md$/.test(f) || /^(LICENSE|CONTRIBUTING|CODE_OF_CONDUCT|SECURITY)/i.test(f) || /^docs\/(spec|decisions)\//.test(f) || /^docs\/(open-questions|discrepancies|roadmap|tech-debt|baseline)/.test(f);
+  docs.existing = docs.readmeLines >= 10 || docs.decisionRecords.some(f => !/0001-adopt-generative-specification/.test(f)) || docs.otherSpecFiles.length > 0 || docs.markdown.some(f => !notDoc(f));
+  const debt = { markers: 0, files: [] };
+  for (const f of source.slice(0, 1500)) { const n = ((readText(root, f) || '').match(/\b(?:TODO|FIXME|HACK|XXX)\b/g) || []).length; if (n) { debt.markers += n; debt.files.push({ file: f, markers: n }); } }
+  debt.files = debt.files.sort((a, b) => b.markers - a.markers || (a.file < b.file ? -1 : 1)).slice(0, 10);
   const ci = files.filter(f => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f) || /^(\.gitlab-ci\.yml|azure-pipelines\.yml|Jenkinsfile|\.circleci\/config\.yml|bitbucket-pipelines\.yml)$/.test(f));
   const containers = files.filter(f => /(^|\/)(Dockerfile[^/]*|docker-compose[^/]*\.ya?ml|compose\.ya?ml)$/.test(f)).slice(0, 10);
   const nonBoiler = files.filter(f => !/^(README(\.[a-z]+)?|LICENSE[^/]*|\.gitignore|\.gitattributes|\.editorconfig)$/i.test(f));
@@ -334,7 +346,7 @@ export function inventory(root) {
     files: { total: files.length, source: source.length, tests: testFiles.length, testCases, truncated },
     languages, stacks, testCommands: stacks.flatMap(s => s.testCommands.map(t => ({ ...t, dir: s.dir }))),
     entryPoints: stacks.flatMap(s => s.entryPoints.map(e => ({ ...e, dir: s.dir }))), routes: scan.routes, cliCommands: scan.commands, sourceFilesScanned: scan.scanned,
-    folders, docs, spec: sp, git: g, ci, containers, gs: { level: cfg.level || null, sentinel: cfg.sentinel || null },
+    folders, docs, debt, spec: sp, git: g, ci, containers, gs: { level: cfg.level || null, sentinel: cfg.sentinel || null },
   };
 }
 
@@ -367,6 +379,8 @@ export function renderInventoryMd(inv) {
   for (const f of inv.folders) L.push(row(f.dir === '.' ? '(root)' : f.dir + '/', f.files, f.subfolders.join(', ')));
   L.push('', '## Documents', '');
   L.push(`- README: ${inv.docs.readme || 'none'}. Instruction files: ${inv.docs.instructionFiles.join(', ') || 'none'}. Decision records: ${inv.docs.decisionRecords.length}. Other spec-like files: ${inv.docs.otherSpecFiles.join(', ') || 'none'}. Spec tool folders: ${inv.docs.specTools.join(', ') || 'none'}.`);
+  L.push(`- Existing documentation: ${inv.docs.existing ? 'YES (the prompt makes the assistant compare it with the code)' : 'no (a README under 10 lines or none, no decision records, no other docs)'}. Issue-tracker or backlog files: ${inv.docs.trackerFiles.join(', ') || 'none'}.`);
+  L.push(`- Debt markers in source (TODO, FIXME, HACK, XXX): ${inv.debt.markers}${inv.debt.files.length ? '; most in ' + inv.debt.files.slice(0, 5).map(f => `\`${f.file}\` ${f.markers}`).join(', ') : ''}.`);
   if (inv.docs.markdown.length) L.push(`- Markdown: ${inv.docs.markdown.join(', ')}.`);
   if (inv.git.isRepo && inv.git.commits) {
     L.push('', '## Git history', '', `- Recent subjects: ${inv.git.recentSubjects.map(s => '"' + s + '"').join('; ')}.`);
@@ -391,7 +405,7 @@ export const SPEC_SECTIONS = [
 
 const RULES = [
   '**Never record a ratification, an acceptance or a decision on the person\'s behalf.** Do not run `gs decide add`, do not edit `docs/decisions.log.md`, do not change a decision record\'s Status to Accepted, do not add `Signed-off-by`. Ratifying is the person\'s act; you propose, they decide. Tell them which command is theirs.',
-  '**Do not change production source code in this session.** You may write `docs/spec/SPEC.md`, `docs/open-questions.md` and, if the person asks, decision records and tests. Do not commit unless the person tells you to; if they do, use `type: what changed` and an `Assisted-by:` or `Co-Authored-By:` trailer.',
+  '**Do not change production source code in this session.** You may write `docs/spec/SPEC.md`, `docs/open-questions.md`, `docs/discrepancies.md`, `docs/tech-debt.md`, `docs/roadmap.md`, the assistant instruction file, gate and hook configuration and the baseline, decision records with `Status: Proposed`, and, if the person asks, tests. Do not commit unless the person tells you to; if they do, use `type: what changed` and an `Assisted-by:` or `Co-Authored-By:` trailer.',
   '**Do not invent.** Every statement in the spec ends with exactly one tag (for a requirement, the one-sentence line under its heading; for a criterion, the end of its line): `[FOUND IN CODE: path/to/file.ext:line]` (you read it there) or `[ASSUMED: why you think so]` (you did not see it). A criterion you found in code also carries `[observed]`, a tag the gs tools already know: derived from code, not yet ratified. Never tag a guess as FOUND IN CODE.',
   '**Ask, do not decide.** Anything the code cannot tell you (intent, who it is for, what must never happen, which behaviour is a bug) goes to `docs/open-questions.md` as a line starting `OPEN:` and then to the person as a question. Never ask what you can read in the code or in `.gs/inventory.md`.',
   'Answer in the language the person writes to you in. Keep ids, tags and headings in English: programs read them.',
@@ -420,44 +434,59 @@ export function buildPrompt(inv) {
   RULES.forEach((r, i) => L.push(`${i + 1}. ${r}`));
   L.push('');
 
+  let n = 0;
+  const step = t => { n++; L.push('## Step ' + n + '. ' + t, ''); };
+  const adopt = m !== 'greenfield';
+  const docsExist = adopt && inv.docs.existing;
   if (m === 'sync') {
-    L.push('## Step 1. Read', '');
+    step('Read');
     L.push('Read `.gs/inventory.md`, then `docs/spec/` (every file), `docs/open-questions.md` and the decision records. Do not draft a new spec: the person already has one.', '');
-    L.push('## Step 2. Compare the spec with the code', '');
+    step('Compare the spec with the code');
     L.push('For every requirement and criterion id in the spec, find the code that implements it and the test that cites it (`verified by:`). Build a table, one row per id: `id | code found (path:line) | test found | test result if you ran it | verdict`. Verdicts: `in sync`, `spec says, code does not`, `code does, spec silent`, `no test`. Then list, separately:', '');
     L.push('- test ids that the spec does not define (orphans), and criteria no test cites;');
     L.push('- behaviour in the code that no criterion covers (propose a criterion for each, tagged `[observed]` and `[ASSUMED: ...]` if you are unsure);');
     L.push('- criteria the code contradicts (write each as an `OPEN:` line in `docs/open-questions.md` quoting both sides; do not pick a side).');
     L.push('You may run the test command listed in the inventory. If it needs a network, a service or a secret, do not run it and say so.', '');
-    L.push('## Step 3. Ask', '');
-    L.push(...QUESTION_PROTOCOL);
-    L.push('For a mismatch between the spec and the code, the default recommendation is: the spec is the source of truth, so write a regression test that cites the criterion id, see it fail, then fix the code (the person decides when). Recommend changing the spec instead only when the code is clearly the intended behaviour, and say why.', '');
-    L.push('## Step 4. Update the spec', '');
-    L.push('Apply the answers to `docs/spec/`: new criteria get new ids (never renumber or reuse an id); change a criterion only if the person said so. Rewrite each answered `OPEN:` line in `docs/open-questions.md` as `ANSWERED (Qn): ...`.', '');
+  } else if (m === 'greenfield') {
+    step('Ask for the intent first');
+    L.push('The folder has no code and no documents, so there is nothing to read yet. Ask the person, in this order, and wait for each answer: (1) what they want to build and what problem it solves; (2) who will use it; (3) what it must never do. Give a recommendation with each question: derive it from the folder name or README if there is one, otherwise offer two or three example answers and say that they are examples. Then read `.gs/inventory.md` only for the conventions that exist (git, instruction files).', '');
   } else {
-    if (m === 'greenfield') {
-      L.push('## Step 1. Ask for the intent first', '');
-      L.push('The folder has no code and no documents, so there is nothing to read yet. Ask the person, in this order, and wait for each answer: (1) what they want to build and what problem it solves; (2) who will use it; (3) what it must never do. Give a recommendation with each question: derive it from the folder name or README if there is one, otherwise offer two or three example answers and say that they are examples. Then read `.gs/inventory.md` only for the conventions that exist (git, instruction files).', '');
-    } else {
-      L.push('## Step 1. Read', '');
-      L.push('Read `.gs/inventory.md`. Then read the README, the manifests it lists, the entry points, the test files and the routes or commands it found. Skim the history it summarises. ' + (m === 'continue' ? 'Read the existing draft `' + inv.spec.file + '` and keep its ids and what the person already answered. ' : '') + 'Do not ask the person what the code does.');
-      L.push('You may run the test command listed in the inventory to see the real result. If it needs a network, a service or a secret, do not run it and say so. Do not fix anything that fails.', '');
-      L.push('## Step 2. Explore', '');
-      L.push('Find, for each part of the system: what it does, for whom, what it depends on, what it must not do. Note where the code and the README disagree. Keep a list of what you could not tell: those are your questions.', '');
-    }
-    L.push(`## Step ${m === 'greenfield' ? 2 : 3}. Draft the spec proposal`, '');
-    L.push(`Write \`docs/spec/SPEC.md\` ${m === 'continue' ? '(edit the draft; never renumber an id)' : '(it holds only the placeholder that gs init wrote; replace the placeholder text, keep the file)'} with **all** of these sections, in this order:`, '');
-    SPEC_SECTIONS.forEach((s, i) => L.push(`${i + 1}. ${s}`));
-    L.push('');
-    L.push('Rules for the draft: one requirement per feature that exists, ids `F-001`, `F-002`, ... in the order you describe them; at least three criteria in total and at least as many as the floor in `docs/baseline.json` if that file exists; every requirement sentence and every criterion ends with its tag (rule 3); a criterion whose test you did not find says `verified by: manual step (no test found)`. Do not write a criterion for behaviour you did not see' + (m === 'greenfield' ? ' (there is no code: every statement is `[ASSUMED: ...]` until the person answers)' : '') + '.', '');
-    L.push(`## Step ${m === 'greenfield' ? 3 : 4}. Write what you could not decide`, '');
-    L.push('Append to `docs/open-questions.md` one line per unanswered point, each starting `OPEN:` and ending with the id of the requirement it blocks. (A line starting `OPEN:` blocks the gate at levels L1 and L2 until it is answered, which is the point.)', '');
-    L.push(`## Step ${m === 'greenfield' ? 4 : 5}. Ask the questions`, '');
-    L.push(...QUESTION_PROTOCOL, '');
-    L.push(`## Step ${m === 'greenfield' ? 5 : 6}. Update the spec with the answers`, '');
-    L.push('For each answer: change the statement, replace its `[ASSUMED: ...]` tag with `[ANSWERED: Qn]` (it means the person answered, not that they ratified), and rewrite the `OPEN:` line in `docs/open-questions.md` as `ANSWERED (Qn): <the answer>`. Never renumber an id.', '');
+    step('Read');
+    L.push('Read `.gs/inventory.md`. Then read the README, the manifests it lists, the entry points, the test files and the routes or commands it found. Skim the history it summarises. ' + (m === 'continue' ? 'Read the existing draft `' + inv.spec.file + '` and keep its ids and what the person already answered. ' : '') + 'Do not ask the person what the code does.');
+    L.push('You may run the test command listed in the inventory to see the real result. If it needs a network, a service or a secret, do not run it and say so. Do not fix anything that fails.', '');
+    step('Explore');
+    L.push('Find, for each part of the system: what it does, for whom, what it depends on, what it must not do. Keep a list of what you could not tell: those are your questions.', '');
   }
-  const last = m === 'sync' ? 5 : m === 'greenfield' ? 6 : 7;
+  if (docsExist) {
+    step('Compare the existing documentation with the code, and mark every discrepancy');
+    L.push('The project already has documentation (README, docs, decision records: see "Documents" in `.gs/inventory.md`). The code is the evidence; the documents are claims. Read each document and check every statement about behaviour, commands, configuration, structure or versions against the code. Write `docs/discrepancies.md`: one entry per DISCREPANCY, in this shape: `D-001 | doc says: <quote> (path:line) | code does: <what> (path:line) | kind: stale doc, wrong doc, or code drifted | your guess which side is right`. File and line on both sides, always; if one side has no line (a missing feature), say so. Do not fix either side and do not choose: the person decides. This file is separate from the spec: it records disagreement, not intent.', '');
+  }
+  if (m !== 'sync') {
+    step('Draft the spec proposal' + (adopt ? ' (the as-is spec)' : ''));
+    L.push('Write `docs/spec/SPEC.md` ' + (m === 'continue' ? '(edit the draft; never renumber an id)' : m === 'greenfield' ? '(it holds only the placeholder that gs init wrote; replace the placeholder text, keep the file)' : '(it holds only the placeholder that gs init wrote, or does not exist yet; replace the placeholder text, keep the file)') + ' with **all** of these sections, in this order:', '');
+    SPEC_SECTIONS.forEach((x, i) => L.push((i + 1) + '. ' + x));
+    L.push('');
+    L.push('Rules for the draft: ' + (adopt ? 'the spec describes what the system does TODAY (as-is), never what the person wishes: wishes go to the roadmap (a later step). ' : '') + 'one requirement per feature that exists, ids `F-001`, `F-002`, ... in the order you describe them; at least three criteria in total and at least as many as the floor in `docs/baseline.json` if that file exists; every requirement sentence and every criterion ends with its tag (rule 3); a criterion whose test you did not find says `verified by: manual step (no test found)`. Do not write a criterion for behaviour you did not see' + (m === 'greenfield' ? ' (there is no code: every statement is `[ASSUMED: ...]` until the person answers)' : '') + '.', '');
+    step('Write what you could not decide');
+    L.push('Append to `docs/open-questions.md` one line per unanswered point, each starting `OPEN:` and ending with the id of the requirement it blocks. (A line starting `OPEN:` blocks the gate at levels L1 and L2 until it is answered, which is the point.)', '');
+  }
+  if (adopt) {
+    step('Create the sentinel from what you FOUND');
+    L.push('Create the assistant instruction file the person chose (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.github/copilot-instructions.md` or `.cursor/rules/gs.mdc`; the "Instruction files" line of the inventory says which exist; if one exists, read it and extend it, never overwrite what the person wrote). Write it from the code and the documents you actually read, not from a template: what the system is and what it must never do (as found), the commands that really run the tests and the build (the ones you ran or found), the real code layout, the constraints you saw with their reasons, and a routing table (topic | file) that names only paths that exist. Keep it small enough to read whole. Anything you could not confirm is an `OPEN:` line, not a sentence.', '');
+    step('Mark the technical debt you find');
+    L.push('Write `docs/tech-debt.md`: one entry per item, in this shape: `T-001 | item | evidence (path:line, or the command and its output) | severity guess (high, medium, low) and why | suggested step`. Start from the markers the inventory counted (' + inv.debt.markers + ' TODO, FIXME, HACK or XXX in source' + (inv.debt.files.length ? ', most in ' + inv.debt.files.slice(0, 3).map(f => '`' + f.file + '`').join(', ') : '') + '), then add what you saw: duplicated or dead code, missing tests, undeclared or unused dependencies, failing tests, hard-coded secrets or paths. Severity is your guess; say so. Do not fix any of it. ' + (inv.docs.trackerFiles.length ? 'The inventory found these backlog or tracker files: ' + inv.docs.trackerFiles.join(', ') + '. Read them and import or link their items. ' : '') + 'Also ASK the person whether a tech-debt list already exists elsewhere (an issue tracker, TODO files, a wiki, a spreadsheet) that you should import or link; do not invent one. This file is separate from the spec and from the roadmap.', '');
+  }
+  step('Ask the questions');
+  L.push(...QUESTION_PROTOCOL, '');
+  if (adopt) {
+    step('Ask what the person WANTS TO CHANGE: the roadmap');
+    L.push('Ask for a report of what they want to change, or a roadmap of future steps (a pasted list, a link, or their own words). Record it in `docs/roadmap.md`, one entry per item in their own words, in the order they gave it. It is the WISHED-FOR state and stays **separate** from the as-is spec: never turn a roadmap item into a requirement or criterion until the person ratifies the change. If they have none yet, write the file with the line `(none given yet)` and move on.', '');
+    step('Configure the substrate to reflect what exists today');
+    L.push('Set up the gates, hooks and the ratchet baseline (`docs/baseline.json`, `.githooks/`, the CI workflow, the test command) so that they describe **the project as it is**: measure today\'s test count and result, coverage, lint and type errors, and write them as the baseline (floors for what must not fall, ceilings for error counts). Nothing that exists today may become blocked: a check that fails on today\'s code is advisory, and labelled so. This is configuration, not production code. Every such "accepted as is" choice (a failing test tolerated, a missing lint rule, a low coverage floor, a gate left advisory) is a **proposal for the person to ratify**: one decision record per choice in `docs/decisions/` with `Status: Proposed`, saying what was accepted as is, why, and that normalizing or changing it later is allowed and expected. You never ratify these records and you never add them to `docs/decisions.log.md`; the person does, with `gs decide add`.', '');
+  }
+  step('Update the spec with the answers');
+  L.push('For each answer: change the statement, replace its `[ASSUMED: ...]` tag with `[ANSWERED: Qn]` (it means the person answered, not that they ratified), and rewrite the `OPEN:` line in `docs/open-questions.md` as `ANSWERED (Qn): <the answer>`. Never renumber an id.' + (adopt ? ' Keep the four artifacts apart: the as-is spec (`docs/spec/`), the discrepancies, the roadmap and the debt list; an answer goes in the one it belongs to.' : ''), '');
+  const last = n + 1;
   L.push(`## Step ${last}. Stop and hand over`, '');
   L.push('Print a short report: what is in the spec (counts of requirements, criteria, `FOUND IN CODE`, `ASSUMED`, `ANSWERED`), the `OPEN:` lines left, and the places where the code and the README or the old spec disagree. Then **stop** and say, in plain words:', '');
   L.push('> The spec is a proposal. Read it, change what is wrong, and ratify it yourself: record your acceptance with `gs decide add` (run `gs decide` to see its options), or accept the decision record by editing its Status line under your own name and committing. I have not ratified anything and I will not.', '');
@@ -541,7 +570,7 @@ export function nextSteps(inv, clis) {
   L.push(`  3. It will ${inv.mode === 'sync' ? 'compare the spec with the code' : inv.mode === 'greenfield' ? 'ask you what you want to build' : 'draft a spec from your code'}, ask you questions that each come with a recommended answer (reply ok to take it), then stop so that you ratify; after that run: gs check`);
   if (clis.length) {
     L.push('', 'Assistants found on this machine, and the exact command that hands each one the prompt (copy it, or add --launch <name> to gs start):');
-    for (const c of clis) L.push(`  ${c.cli.padEnd(8)} ${handCommand(c.cli)}`);
+    for (const c of clis) L.push(`  ${c.cli.padEnd(8)} ${handCommand(c.cli)}${CORE_CLIS.includes(c.cli) ? '' : '   (second tier: supported, flags verified, less used)'}`);
   } else L.push('', `No assistant CLI (${CLIS.join(', ')}) was found on the PATH, so: ${GENERIC}.`);
   return L;
 }
